@@ -1,0 +1,165 @@
+/* ==========================================================================
+   Liquid Glass — 液态玻璃质感（纯 CSS 实现，无需 React）
+   参考 Apple Liquid Glass 的视觉特征：
+     1. 真实背景模糊 + 提亮（backdrop-filter）
+     2. 边缘折射高光（多层 inset 阴影模拟光线在玻璃边缘的弯曲）
+     3. 随鼠标移动的镜面高光（radial-gradient + CSS 变量）
+     4. 弹性过渡（带轻微回弹的 cubic-bezier）
+   关闭方式：把 _config.yml 里 blog_enhance.glass.enable 设为 false 重新生成即可
+   ========================================================================== */
+
+/* 需要定位上下文来承载高光伪元素 */
+.enh-weather,
+.enh-home-item,
+.enh-project,
+.enh-modal {
+  position: relative;
+  overflow: hidden;
+  transition: transform .38s cubic-bezier(.22, 1.35, .36, 1),
+              border-color .25s,
+              box-shadow .35s,
+              background .35s;
+}
+
+/* ---------- 暗色主题下的玻璃 ---------- */
+.cosy-theme-dark .enh-weather,
+.cosy-theme-dark .enh-home-item,
+.cosy-theme-dark .enh-project,
+.cosy-theme-dark .enh-modal {
+  background: linear-gradient(135deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .05));
+  backdrop-filter: blur(24px) saturate(180%) brightness(1.06);
+  -webkit-backdrop-filter: blur(24px) saturate(180%) brightness(1.06);
+  border-color: rgba(255, 255, 255, .22);
+  box-shadow:
+    0 10px 36px rgba(0, 0, 0, .30),
+    inset 0 1px 0 rgba(255, 255, 255, .50),
+    inset 0 -1px 0 rgba(255, 255, 255, .12),
+    inset 1px 0 0 rgba(255, 255, 255, .16),
+    inset -1px 0 0 rgba(255, 255, 255, .16);
+}
+
+/* ---------- 亮色主题下的玻璃 ---------- */
+.cosy-theme-light .enh-weather,
+.cosy-theme-light .enh-home-item,
+.cosy-theme-light .enh-project,
+.cosy-theme-light .enh-modal {
+  background: linear-gradient(135deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .30));
+  backdrop-filter: blur(22px) saturate(175%) brightness(1.03);
+  -webkit-backdrop-filter: blur(22px) saturate(175%) brightness(1.03);
+  border-color: rgba(255, 255, 255, .75);
+  box-shadow:
+    0 10px 30px rgba(31, 35, 60, .10),
+    inset 0 1px 0 rgba(255, 255, 255, .95),
+    inset 0 -1px 0 rgba(255, 255, 255, .55),
+    inset 1px 0 0 rgba(255, 255, 255, .70),
+    inset -1px 0 0 rgba(255, 255, 255, .70);
+}
+
+/* ---------- 随鼠标移动的镜面高光 ---------- */
+.enh-weather::after,
+.enh-home-item::after,
+.enh-project::after,
+.enh-modal::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  background: radial-gradient(
+    240px circle at var(--lg-mx, 50%) var(--lg-my, 50%),
+    rgba(255, 255, 255, .30),
+    rgba(255, 255, 255, 0) 62%
+  );
+  opacity: 0;
+  transition: opacity .3s;
+  mix-blend-mode: soft-light;
+}
+
+.enh-weather:hover::after,
+.enh-home-item:hover::after,
+.enh-project:hover::after,
+.enh-modal::after {
+  opacity: 1;
+}
+
+.cosy-theme-light .enh-weather::after,
+.cosy-theme-light .enh-home-item::after,
+.cosy-theme-light .enh-project::after,
+.cosy-theme-light .enh-modal::after {
+  background: radial-gradient(
+    240px circle at var(--lg-mx, 50%) var(--lg-my, 50%),
+    rgba(255, 255, 255, .70),
+    rgba(255, 255, 255, 0) 62%
+  );
+  mix-blend-mode: normal;
+}
+
+/* ---------- 边缘折射：顶部一道细高光，模拟光线穿过玻璃边缘 ---------- */
+.enh-home-item::before,
+.enh-project::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .85), transparent);
+}
+
+.cosy-theme-light .enh-home-item::before,
+.cosy-theme-light .enh-project::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 1), transparent);
+}
+
+/* ---------- 弹性悬停 ---------- */
+.enh-home-item:hover,
+.enh-project:hover {
+  transform: translateY(-3px) scale(1.012);
+  border-color: var(--color-primary);
+}
+
+.enh-project[open],
+.enh-home-item:active {
+  transform: translateY(-1px) scale(.998);
+}
+
+/* ---------- 卡片内部文字保持清晰可读 ---------- */
+.enh-home-item > *,
+.enh-project summary,
+.enh-project .enh-project-body {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- 侧栏也加上玻璃质感 ---------- */
+.cosy-theme-dark #aside-box {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .02));
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+.cosy-theme-light #aside-box {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .28));
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+/* ---------- 不支持 backdrop-filter 时的降级：保持可读的半透明背景 ---------- */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .cosy-theme-dark .enh-weather,
+  .cosy-theme-dark .enh-home-item,
+  .cosy-theme-dark .enh-project,
+  .cosy-theme-dark .enh-modal {
+    background: rgba(45, 46, 67, .92);
+  }
+
+  .cosy-theme-light .enh-weather,
+  .cosy-theme-light .enh-home-item,
+  .cosy-theme-light .enh-project,
+  .cosy-theme-light .enh-modal {
+    background: rgba(255, 255, 255, .92);
+  }
+}
