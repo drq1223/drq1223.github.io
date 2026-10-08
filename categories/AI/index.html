@@ -102,7 +102,7 @@
           <div class="ellipsis">友链</div>
         </a>
       </li></ul>
-  <ul><li class="">
+  <ul><li class="active">
         <a href="/categories/AI/">
           <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></g></svg>
           <div class="ellipsis">
@@ -142,39 +142,95 @@
   </aside>
   <main>
     
-<link rel="stylesheet" href="/css/480d1cae.css">
+<link rel="stylesheet" href="/css/32fa10f2.css">
 
 
-<div class="tags-container cosy-scrollbar">
-  <div class="content">
-    <h2>
-      <cosy-label color="red">记录</cosy-label>
-    </h2>
-    <ul class="timeline">
+
+
+<div class="category">
+  <header>
+    <div class="left">
       
-      <li>
-        <a class="timeline-item" href="/2026/09/29/%E6%88%91%E7%9A%84%E7%AC%AC%E4%B8%80%E7%AF%87%E5%8D%9A%E5%AE%A2/">
-          <div class="timeline-info">
-            
-            <span>09-29 12:17:39</span>
-          </div>
-          <div class="timeline-marker"></div>
-          <div class="timeline-content">
-            <div class="timeline-title ellipsis">
-              <span>我的第一篇博客</span>
-            </div>
-            <p>HealthAgent —— 智能健康助手HealthAgent 是一个基于大语言模型和 Python 构建的智能健康管理 Agent。
-项目主要用于学习 Agent 的基本架构、工具调用、数据持久化...</p>
-          </div>
-        </a>
-      </li>
-      
-    </ul>
-  </div>
-</div>
+<link rel="stylesheet" href="/css/7d333f9e.css">
+
+<nav class="breadcrumb">
+  <section>
+    <cosy-tooltip placement="bottom-left">
+      <span slot="content"><span>首页</span>
+        <cosy-short-key>⌘</cosy-short-key>
+        <cosy-short-key>H</cosy-short-key>
+      </span>
+      <cosy-icon href="/">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20">
+          <g fill="none">
+            <path d="M8.998 2.388a1.5 1.5 0 0 1 2.005 0l5.5 4.942A1.5 1.5 0 0 1 17 8.445V15.5a1.5 1.5 0 0 1-1.5 1.5H13a1.5 1.5 0 0 1-1.5-1.5V12a.5.5 0 0 0-.5-.5H9a.5.5 0 0 0-.5.5v3.5A1.5 1.5 0 0 1 7 17H4.5A1.5 1.5 0 0 1 3 15.5V8.445c0-.425.18-.83.498-1.115l5.5-4.942zm1.336.744a.5.5 0 0 0-.668 0l-5.5 4.942A.5.5 0 0 0 4 8.445V15.5a.5.5 0 0 0 .5.5H7a.5.5 0 0 0 .5-.5V12A1.5 1.5 0 0 1 9 10.5h2a1.5 1.5 0 0 1 1.5 1.5v3.5a.5.5 0 0 0 .5.5h2.5a.5.5 0 0 0 .5-.5V8.445a.5.5 0 0 0-.166-.371l-5.5-4.942z" fill="currentColor"></path>
+          </g>
+        </svg>
+      </cosy-icon>
+    </cosy-tooltip>
+    
+    <svg class="arrow" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20">
+      <g fill="none">
+        <path d="M7.733 4.207a.75.75 0 0 1 1.06.026l5.001 5.25a.75.75 0 0 1 0 1.035l-5 5.25a.75.75 0 1 1-1.087-1.034L12.216 10l-4.51-4.734a.75.75 0 0 1 .027-1.06z" fill="currentColor"></path>
+      </g>
+    </svg>
+    <span class="ellipsis">
+      AI
+    </span>
+    
+    
+  </section>
+</nav>
 
 
 <script src="/js/31d6cfe0.js"></script>
+
+      <!-- 筛选 -->
+      <cosy-button type="dashed" id="filter-button">
+        <svg slot="prefix" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20">
+          <g fill="none">
+            <path d="M7.5 13h5a.5.5 0 0 1 .09.992L12.5 14h-5a.5.5 0 0 1-.09-.992L7.5 13h5h-5zm-2-4h9a.5.5 0 0 1 .09.992L14.5 10h-9a.5.5 0 0 1-.09-.992L5.5 9h9h-9zm-2-4h13a.5.5 0 0 1 .09.992L16.5 6h-13a.5.5 0 0 1-.09-.992L3.5 5h13h-13z" fill="currentColor"></path>
+          </g>
+        </svg>
+        <span slot="content">筛选</span>
+      </cosy-button>
+    </div>
+    <div class="center">
+      <!-- 分页代码 -->
+      
+    </div>
+  </header>
+
+  <!-- 分类文章列表 -->
+  <ul class="post-list cosy-scrollbar">
+    
+    <li data-status="">
+      <a href="/2026/09/29/%E6%88%91%E7%9A%84%E7%AC%AC%E4%B8%80%E7%AF%87%E5%8D%9A%E5%AE%A2/">
+        
+        <p class="ellipsis">
+          <span>我的第一篇博客</span>
+          <!-- <cosy-tooltip placement="bottom-left" max-width="250px">
+            <span slot="content">HealthAgent —— 智能健康助手HealthAgent 是一个基于大语言模型和 Python 构建的智能健康管</span>
+            <span></span>
+          </cosy-tooltip> -->
+
+        </p>
+        <span class="post-date">
+          
+          <cosy-tooltip placement="left">
+            <span slot="content">创建于: 2026-09-29 12:17:39</span>
+            Sep 29
+          </cosy-tooltip>
+        </span>
+      </a>
+    </li>
+    
+  </ul>
+
+</div>
+
+
+<script src="/js/8db9c2b5.js"></script>
 
   </main>
 <!-- hexo injector body_end start --><script src="/js/enhance.js"></script><script src="/js/search.js"></script><!-- hexo injector body_end end --></body>
