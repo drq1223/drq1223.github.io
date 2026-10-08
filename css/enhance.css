@@ -499,6 +499,171 @@ main.enh-scrollable {
 }
 
 /* --------------------------------------------------------------------------
+   8.5 首页项目卡片（可展开）
+   -------------------------------------------------------------------------- */
+.enh-project {
+  border-radius: var(--enh-radius);
+  border: 1px solid var(--color-border-2, var(--color-border));
+  background: var(--color-bg);
+  overflow: hidden;
+  transition: border-color .18s, box-shadow .18s;
+}
+
+.enh-project:hover {
+  border-color: var(--color-primary);
+}
+
+.enh-project[open] {
+  border-color: var(--color-primary);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .08);
+}
+
+.enh-project-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+  transition: background .18s;
+}
+
+.enh-project-summary::-webkit-details-marker {
+  display: none;
+}
+
+.enh-project-summary:hover {
+  background: var(--color-bg-hover);
+}
+
+.enh-project-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.enh-project-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-font);
+}
+
+.enh-project-desc {
+  font-size: 12.5px;
+  color: var(--color-font-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.enh-project-toggle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  color: var(--color-font-2);
+}
+
+.enh-project-toggle svg {
+  width: 18px;
+  height: 18px;
+  transition: transform .22s;
+}
+
+.enh-project[open] .enh-project-toggle svg {
+  transform: rotate(180deg);
+}
+
+.enh-project-body {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--color-border-2, var(--color-border));
+  animation: enh-fade .2s ease-out;
+}
+
+@keyframes enh-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.enh-project-detail {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-font-1, var(--color-font));
+}
+
+.enh-project-section {
+  margin-top: 14px;
+}
+
+.enh-project-section h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-font-2);
+}
+
+.enh-project-section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.enh-project-section li {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--color-font-1, var(--color-font));
+}
+
+.enh-project-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.enh-project-tools code {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--color-bg-2);
+  font-size: 11.5px;
+  color: var(--color-font-2);
+}
+
+.enh-project-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.enh-stack-tag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--color-primary);
+  font-size: 11.5px;
+  color: var(--color-primary);
+}
+
+.enh-project-link {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.enh-project-link:hover {
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------------------------
    9. 友链卡片
    -------------------------------------------------------------------------- */
 /* 标签云 */
