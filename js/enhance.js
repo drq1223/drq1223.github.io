@@ -280,6 +280,118 @@
   }
 
   /* ======================================================================
+     6.6 首页天气小组件（Open-Meteo，免费且无需任何 API key）
+     ====================================================================== */
+  function wmoInfo(code) {
+    var m = {
+      0: ['☀️', '晴'], 1: ['🌤️', '晴间多云'], 2: ['⛅', '多云'], 3: ['☁️', '阴'],
+      45: ['🌫️', '雾'], 48: ['🌫️', '冻雾'],
+      51: ['🌦️', '小毛毛雨'], 53: ['🌦️', '毛毛雨'], 55: ['🌧️', '大毛毛雨'],
+      56: ['🌧️', '冻毛毛雨'], 57: ['🌧️', '强冻毛毛雨'],
+      61: ['🌦️', '小雨'], 63: ['🌧️', '中雨'], 65: ['🌧️', '大雨'],
+      66: ['🌧️', '冻雨'], 67: ['🌧️', '强冻雨'],
+      71: ['🌨️', '小雪'], 73: ['🌨️', '中雪'], 75: ['❄️', '大雪'], 77: ['❄️', '雪粒'],
+      80: ['🌦️', '阵雨'], 81: ['🌧️', '阵雨'], 82: ['⛈️', '强阵雨'],
+      85: ['🌨️', '阵雪'], 86: ['❄️', '强阵雪'],
+      95: ['⛈️', '雷阵雨'], 96: ['⛈️', '雷雨伴冰雹'], 99: ['⛈️', '强雷暴']
+    };
+    return m[code] || ['🌡️', '—'];
+  }
+
+  function weekLabel(dateStr, idx) {
+    if (idx === 0) return '今天';
+    if (idx === 1) return '明天';
+    var names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    return names[new Date(dateStr + 'T00:00:00').getDay()];
+  }
+
+  function initWeather() {
+    var w = E.weather;
+    if (!w || w.enable === false) return;
+    var welcome = document.querySelector('.welcome');
+    if (!welcome || welcome.querySelector('.enh-weather')) return;
+
+    var card = document.createElement('div');
+    card.className = 'enh-weather';
+    card.innerHTML =
+      '<div class="enh-wx-time">--:--:--</div>' +
+      '<div class="enh-wx-main">' +
+        '<span class="enh-wx-temp">--°</span>' +
+        '<span class="enh-wx-side">' +
+          '<span class="enh-wx-icon">⏳</span>' +
+          '<span class="enh-wx-city"></span>' +
+        '</span>' +
+      '</div>' +
+      '<div class="enh-wx-days"></div>';
+    welcome.appendChild(card);
+
+    // 本地时钟，每秒更新
+    var timeEl = card.querySelector('.enh-wx-time');
+    function tick() {
+      try {
+        timeEl.textContent = new Date().toLocaleTimeString('en-US', {
+          hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit'
+        });
+      } catch (e) { /* 忽略 */ }
+    }
+    tick();
+    setInterval(tick, 1000);
+
+    var daysEl = card.querySelector('.enh-wx-days');
+    var tempEl = card.querySelector('.enh-wx-temp');
+    var iconEl = card.querySelector('.enh-wx-icon');
+    var cityEl = card.querySelector('.enh-wx-city');
+
+    function render(data) {
+      if (!data || !data.current || !data.daily) return;
+      var cur = wmoInfo(data.current.weather_code);
+      tempEl.textContent = Math.round(data.current.temperature_2m) + '°';
+      iconEl.textContent = cur[0];
+      cityEl.textContent = (w.city ? w.city + ' · ' : '') + cur[1];
+
+      var d = data.daily;
+      var html = '';
+      for (var i = 0; i < d.time.length; i++) {
+        var info = wmoInfo(d.weather_code[i]);
+        html += '<div class="enh-wx-day' + (i === 0 ? ' is-today' : '') + '">' +
+          '<span class="enh-wx-week">' + weekLabel(d.time[i], i) + '</span>' +
+          '<span class="enh-wx-dicon">' + info[0] + '</span>' +
+          '<span class="enh-wx-range"><b>' + Math.round(d.temperature_2m_max[i]) + '°</b> / ' +
+          Math.round(d.temperature_2m_min[i]) + '°</span>' +
+          '</div>';
+      }
+      daysEl.innerHTML = html;
+    }
+
+    // 会话内缓存 30 分钟，减少请求
+    var CACHE_KEY = 'enh-weather-cache';
+    try {
+      var cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || 'null');
+      if (cached && cached.data && Date.now() - cached.t < 30 * 60 * 1000) {
+        render(cached.data);
+        return;
+      }
+    } catch (e) { /* 忽略 */ }
+
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + w.latitude +
+      '&longitude=' + w.longitude +
+      '&current=temperature_2m,weather_code' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min' +
+      '&timezone=Asia%2FShanghai&forecast_days=7';
+
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        render(data);
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data: data })); } catch (e) { /* 忽略 */ }
+      })
+      .catch(function () {
+        var err = card.querySelector('.enh-wx-days');
+        if (err) err.innerHTML = '<div class="enh-wx-error">天气数据加载失败，稍后刷新重试</div>';
+      });
+  }
+
+  /* ======================================================================
      7. 评论（Giscus）
      ====================================================================== */
   function initComment() {
@@ -317,6 +429,7 @@
     initLightbox();
     initThemeToggle();
     initHomeScroll();
+    initWeather();
     initSiteStats();
     initComment();
   }
