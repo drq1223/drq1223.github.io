@@ -6,9 +6,17 @@
 <title>城市靶场 · City Shooting Range</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e14; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  /* overscroll-behavior: none 是关键——阻止横向滚动量溢出成浏览器的「滑动前进/后退」手势 */
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #0b0e14;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
   #app { position: fixed; inset: 0; }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; -webkit-user-drag: none; }
 
   /* 准星 */
   #crosshair {
@@ -119,9 +127,11 @@
     <div><b>WASD</b> 移动</div><div><b>鼠标</b> 瞄准</div>
     <div><b>左键</b> 开火</div><div><b>右键</b> 瞄准镜 / 精确射击</div>
     <div><b>R</b> 换弹</div><div><b>1 / 2</b> 切换武器</div>
-    <div><b>滚轮</b> 切换武器</div><div><b>Esc</b> 暂停</div>
+    <div><b>滚轮</b> 切换武器</div><div><b>F</b> 全屏</div>
+    <div><b>Esc</b> 暂停</div>
   </div>
   <div class="start">点击开始（锁定鼠标）</div>
+  <p style="font-size:12px;opacity:.6;margin-top:2px;">用触控板玩的话建议先按 <b>F</b> 全屏，可避免系统把滑动当成「前进/后退」手势</p>
   <div class="credit">Built with Three.js · 程序化低多边形模型</div>
 </div>
 
@@ -420,6 +430,9 @@
 
   function startGame() {
     if (started) return;
+    // 独立打开时自动全屏：全屏下浏览器不响应触控板「滑动前进/后退」，指针锁定不会被抢
+    // （嵌入 iframe 时由外层博客页负责全屏，这里不重复请求，避免嵌套全屏）
+    if (window.self === window.top) toggleFullscreen();
     renderer.domElement.requestPointerLock();
   }
   overlay.addEventListener("click", startGame);
@@ -455,19 +468,41 @@
   });
   document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
+  /* ---------- 抑制浏览器 / 系统手势 ----------
+     触控板或触摸屏滑动会被浏览器当成「前进 / 后退」手势（系统提示「无效手势」），
+     这会把指针锁定打断、游戏立刻暂停。注意这里刻意不拦 touchstart ——
+     拦了会让「点击开始」在触屏设备上失效；touchmove 的 preventDefault 既能挡住
+     滑动，又不会影响 click 的合成。 */
+  ["touchmove", "gesturestart", "gesturechange", "gestureend", "dragstart", "selectstart"].forEach(function (t) {
+    document.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  });
+
+  function toggleFullscreen() {
+    var d = document;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+    } else {
+      var el = d.documentElement;
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      try { var p = req.call(el); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+    }
+  }
+
   document.addEventListener("keydown", function (e) {
     keys[e.code] = true;
     if (e.code === "KeyR") reload();
     if (e.code === "Digit1") switchWeapon("ar");
     if (e.code === "Digit2") switchWeapon("sniper");
+    if (e.code === "KeyF") toggleFullscreen();
     if (e.code === "Escape") { if (pointerLocked) document.exitPointerLock(); }
   });
   document.addEventListener("keyup", function (e) { keys[e.code] = false; });
   window.addEventListener("wheel", function (e) {
+    // 必须 passive:false + preventDefault，否则横向滚轮会被浏览器当成「滑动前进/后退」
+    if (e.cancelable) e.preventDefault();
     if (!pointerLocked) return;
-    if (e.deltaY > 0) switchWeapon(cur === "ar" ? "sniper" : "ar");
-    else switchWeapon(cur === "ar" ? "sniper" : "ar");
-  }, { passive: true });
+    switchWeapon(cur === "ar" ? "sniper" : "ar");
+  }, { passive: false });
 
   function switchWeapon(w) {
     if (w === cur || reloading) return;

@@ -31,7 +31,14 @@
 .sh-btn:hover { background: rgba(76,167,255,.32); }
 .sh-link { font-size: 13px; opacity: .75; }
 .sh-stage { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #0b0e14; }
-.sh-stage iframe { display: block; width: 100%; height: 100%; border: 0; }
+/* overscroll-behavior: contain —— iframe 内部瞄准产生的滚动量不要外溢到博客页，
+   否则会被浏览器当成「滑动前进/后退」手势，指针锁定被打断、游戏直接暂停 */
+.sh-stage iframe { display: block; width: 100%; height: 100%; border: 0; overscroll-behavior: contain; touch-action: none; }
+/* 全屏时铺满整屏，去掉圆角与固定比例 */
+.sh-stage:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; border-radius: 0; }
+.sh-stage:-webkit-full-screen { width: 100vw; height: 100vh; border-radius: 0; }
+/* 游戏运行期间抑制浏览器手势（只禁溢出链，不禁页内正常滚动，退出后不影响浏览博客） */
+html.sh-playing { overscroll-behavior: none; }
 .sh-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #cfd3dc; gap: 10px; text-align: center; padding: 20px; box-sizing: border-box; }
 .sh-placeholder strong { font-size: 15px; color: #fff; }
 .sh-placeholder span { font-size: 13px; opacity: .8; }

@@ -7,7 +7,8 @@
     <link rel="stylesheet" type="text/css" href="css/game-layout.css"/>
     <link rel="shortcut icon" type="image/png" href="assets/sprites/favicon.png"/>
     <style>
-        html, body { margin: 0; overflow: hidden; background: #000; }
+        /* overscroll-behavior / touch-action：防止触控板滑动溢出成浏览器「前进后退」手势 */
+        html, body { margin: 0; overflow: hidden; background: #000; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; }
         /* 返回博客：放在左上角，不挡瞄准区 */
         #back-to-blog {
             position: fixed;
@@ -66,5 +67,12 @@
 <div id="gameArea">
     <canvas id="screen" width="2000" height="1000"></canvas>
 </div>
+<script>
+/* 拦住触摸滑动 —— 否则会被浏览器当成「前进/后退」手势，把正在瞄准的玩家弹走。
+   不拦 touchstart，保证普通点击不受影响。 */
+["touchmove", "gesturestart", "gesturechange", "gestureend", "dragstart", "selectstart"].forEach(function (t) {
+    document.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+});
+</script>
 </body>
 </html>
