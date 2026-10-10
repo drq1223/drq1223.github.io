@@ -5,12 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>
-    丁润琦的博客
+    射击小游戏
   </title>
-  <meta name="description" content="丁润琦的个人博客，记录开发、学习与项目实践">
+  <meta name="description" content="First-person shooting range built with Three.js — assault rifle and sniper, GTA-style low-poly city">
   <meta name="keywords" content="博客,技术分享,学习笔记,开发">
   <meta name="author" content="丁润琦">
-  <link rel="canonical" href="https://drq1223.github.io">
+  <link rel="canonical" href="https://drq1223.github.io/shooter/index.html">
   
   
   <link rel="icon" type="image/svg" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10l7.383 7.418c.823.82.823 2.148 0 2.967a2.11 2.11 0 0 1-2.976 0L10 13"></path><path d="M6.293 15.293l-2.586-2.586a1 1 0 0 1 0-1.414l7.586-7.586a1 1 0 0 1 1.414 0l2.586 2.586a1 1 0 0 1 0 1.414l-7.586 7.586a1 1 0 0 1-1.414 0z"></path></g></svg>'>
@@ -119,7 +119,7 @@
             <span>AI</span>
           </div>
         </a>
-      </li><li class="active">
+      </li><li class="">
         <a href="/categories/Hexo/">
           <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><path d="M9 16h6v2H9zm4-7h-2v2H9v2h2v2h2v-2h2v-2h-2z" fill="currentColor"></path><path d="M12 2c-5.33 4.55-8 8.48-8 11.8c0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8zm0 18c-3.35 0-6-2.57-6-6.2c0-2.34 1.95-5.44 6-9.14c4.05 3.7 6 6.79 6 9.14c0 3.63-2.65 6.2-6 6.2z" fill="currentColor"></path></svg>
           <div class="ellipsis">
@@ -152,12 +152,10 @@
   </aside>
   <main>
     
-<link rel="stylesheet" href="/css/32fa10f2.css">
+<link rel="stylesheet" href="/css/4dbc8f91.css">
 
 
-
-
-<div class="category">
+<div class="post-container">
   <header>
     <div class="left">
       
@@ -179,15 +177,15 @@
       </cosy-icon>
     </cosy-tooltip>
     
+    
     <svg class="arrow" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20">
       <g fill="none">
         <path d="M7.733 4.207a.75.75 0 0 1 1.06.026l5.001 5.25a.75.75 0 0 1 0 1.035l-5 5.25a.75.75 0 1 1-1.087-1.034L12.216 10l-4.51-4.734a.75.75 0 0 1 .027-1.06z" fill="currentColor"></path>
       </g>
     </svg>
     <span class="ellipsis">
-      Hexo
+      射击小游戏
     </span>
-    
     
   </section>
 </nav>
@@ -195,52 +193,45 @@
 
 <script src="/js/31d6cfe0.js"></script>
 
-      <!-- 筛选 -->
-      <cosy-button type="dashed" id="filter-button">
-        <svg slot="prefix" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20">
-          <g fill="none">
-            <path d="M7.5 13h5a.5.5 0 0 1 .09.992L12.5 14h-5a.5.5 0 0 1-.09-.992L7.5 13h5h-5zm-2-4h9a.5.5 0 0 1 .09.992L14.5 10h-9a.5.5 0 0 1-.09-.992L5.5 9h9h-9zm-2-4h13a.5.5 0 0 1 .09.992L16.5 6h-13a.5.5 0 0 1-.09-.992L3.5 5h13h-13z" fill="currentColor"></path>
-          </g>
-        </svg>
-        <span slot="content">筛选</span>
-      </cosy-button>
-    </div>
-    <div class="center">
-      <!-- 分页代码 -->
-      
     </div>
   </header>
-
-  <!-- 分类文章列表 -->
-  <ul class="post-list cosy-scrollbar">
-    
-    <li data-status="">
-      <a href="/2026/09/28/hello-world/">
-        
-        <p class="ellipsis">
-          <span>Hello World</span>
-          <!-- <cosy-tooltip placement="bottom-left" max-width="250px">
-            <span slot="content">Welcome to Hexo! This is your very first post. Check documen</span>
-            <span></span>
-          </cosy-tooltip> -->
-
-        </p>
-        <span class="post-date">
-          
-          <cosy-tooltip placement="left">
-            <span slot="content">创建于: 2026-09-28 20:09:50</span>
-            Sep 28
-          </cosy-tooltip>
-        </span>
-      </a>
-    </li>
-    
+  <div class="content">
+    <main class="cosy-scrollbar">
+      <div class="article-container">
+        <article>
+          <h1 class="post-title">射击小游戏</h1>
+          <p>在博客里加了个<strong>第一人称射击靶场</strong>：用 Three.js 搭的 GTA 风格低多边形城市，可以拿突击步枪和狙击枪打移动靶，比命中、拼爆头。两种枪都能切换，狙击枪带瞄准镜缩放。</p>
+<div class="sh-card">
+  <h3>怎么玩</h3>
+  <ul>
+    <li><strong>移动</strong>：<span class="sh-keys">W</span><span class="sh-keys">A</span><span class="sh-keys">S</span><span class="sh-keys">D</span>，鼠标控制视角（点击页面锁定鼠标）</li>
+    <li><strong>开火</strong>：按住鼠标左键 — 突击步枪全自动，狙击枪单发（栓动）</li>
+    <li><strong>精确射击</strong>：按住鼠标右键开镜，狙击枪会切到瞄准镜视野</li>
+    <li><strong>换弹</strong>：<span class="sh-keys">R</span>；<strong>切枪</strong>：<span class="sh-keys">1</span>/<span class="sh-keys">2</span> 或滚轮；<strong>暂停</strong>：<span class="sh-keys">Esc</span></li>
   </ul>
-
+  <p class="sh-note">提示：枪声用 WebAudio 实时合成，无需额外下载；建议在电脑端用鼠标键盘玩（触屏无法锁定视角）。</p>
 </div>
 
+<div class="sh-actions">
+  <button class="sh-btn" id="sh-start" type="button">▶ 开始游戏</button>
+  <a class="sh-link" href="/games/shooter/" target="_blank" rel="noopener">全屏单独打开 ↗</a>
+</div>
 
-<script src="/js/8db9c2b5.js"></script>
+<div class="sh-stage" id="sh-stage">
+  <div class="sh-placeholder">
+    <strong>点击上面的「开始游戏」载入靶场</strong>
+    <span>Three.js 约 150 KB，载入后即可开火</span>
+  </div>
+</div>
+
+<link rel="stylesheet" href="/shooter/shooter.css">
+<script src="/shooter/shooter.js" defer></script>
+
+        </article>
+      </div>
+    </main>
+  </div>
+</div>
 
   </main>
 <!-- hexo injector body_end start --><script src="/js/enhance.js"></script><script src="/js/search.js"></script><script src="/js/ba-fx.js"></script><script src="/js/liquid-glass.js"></script><!-- hexo injector body_end end --></body>
