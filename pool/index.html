@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>
+    台球小游戏
+  </title>
+  <meta name="description" content="经典 8 球台球，纯前端实现，支持单人（AI 对手）与双人模式">
+  <meta name="keywords" content="博客,技术分享,学习笔记,开发">
+  <meta name="author" content="丁润琦">
+  <link rel="canonical" href="https://drq1223.github.io/pool/index.html">
+  
+  
+  <link rel="icon" type="image/svg" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10l7.383 7.418c.823.82.823 2.148 0 2.967a2.11 2.11 0 0 1-2.976 0L10 13"></path><path d="M6.293 15.293l-2.586-2.586a1 1 0 0 1 0-1.414l7.586-7.586a1 1 0 0 1 1.414 0l2.586 2.586a1 1 0 0 1 0 1.414l-7.586 7.586a1 1 0 0 1-1.414 0z"></path></g></svg>'>
+  
+  
+  
+<link rel="stylesheet" href="/css/b4c95347.css">
+
+  <script>window.i18n = {"tip-status-done":"完成","tip-status-default":"全部","tip-status-todo":"计划","tip-status-doing":"进行","tip-status-other":"其他","text-select":"选择","text-move":"移动","text-esc":"退出","January":"一月","February":"二月","March":"三月","April":"四月","May":"五月","June":"六月","July":"七月","August":"八月","September":"九月","October":"十月","November":"十一月","December":"十二月"}</script>
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/enhance.css"><link rel="stylesheet" href="/css/liquid-glass.css"><script>(function(){var b=window.blogEnhance||{};window.blogEnhance=Object.assign(b,{"root":"/","enhance":{"progress":true,"postMeta":true,"codeCopy":true,"lightbox":true,"themeToggle":true,"siteStats":true},"search":{"enable":true,"maxContentLength":2500},"clickEffect":{"enable":true,"mode":"ripple","text":["丁润琦","Hello","✨"]},"baFx":{"enable":true,"lazy":true,"disableOnMobile":true,"respectReducedMotion":true,"themeColor":"#4ca7ff","trailAlways":true,"clickEnabled":true,"trailEnabled":true,"bloomIntensity":1.7,"bloomIntensityLight":1.1},"weather":{"enable":true,"latitude":39.98,"longitude":116.36,"city":"北京"},"glass":{"enable":true,"highlight":true},"comment":{"enable":false,"repo":"drq1223/drq1223.github.io","repoId":"R_kgDOUwHZUw","category":"Announcements","categoryId":"","mapping":"pathname","theme":"preferred_color_scheme","lang":"zh-CN"}});})();</script><script>var _hmt=_hmt||[];(function(){var hm=document.createElement("script");hm.src="https://hm.baidu.com/hm.js?44a3ce22b4c37eb8f07e675155d7f7c1";var s=document.getElementsByTagName("script")[0];s.parentNode.insertBefore(hm,s);})();</script><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"><script>window.blogEnhance=window.blogEnhance||{};window.blogEnhance.stats={"posts":2,"words":200,"since":"2026-09-28","busuanzi":true};</script></head>
+
+<body id="app">
+  <aside id="aside-box" class="left-aside">
+    <div class="header">
+      
+<link rel="stylesheet" href="/css/61875ce9.css">
+
+<div class="profile">
+  <a class="badge" href="/">
+    <span>Hi</span>
+    <span>丁润琦</span>
+  </a>
+  <cosy-tooltip id="left-aside-button" placement="right">
+    <span slot="content">
+      <span>显示 / 隐藏 左侧导航</span>
+      <cosy-short-key>[</cosy-short-key>
+    </span>
+    <cosy-icon>
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20">
+        <g fill="none">
+          <path d="M16 4c1.104-.019 2 .896 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12zm1 2a1 1 0 0 0-1-1h-2.995v10H16a1 1 0 0 0 1-1V6zm-4.995 9V5H4.001a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8.004z" fill="currentColor"></path>
+        </g>
+      </svg>
+    </cosy-icon>
+  </cosy-tooltip>
+</div>
+
+<script src="/js/5c3f362c.js"></script>
+
+      
+
+
+
+<script>
+  window.algolia = {
+    appId: "",
+    SearchOnlyAPIKey: ""
+  }
+</script>
+
+
+<script src="/js/90cf10ae.js"></script>
+
+    </div>
+    <div class="aside-category">
+      
+<link rel="stylesheet" href="/css/db04a759.css">
+
+
+<nav class="category-nav cosy-scrollbar">
+  <ul><li data-path="archives">
+        <a href="/archives">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20"><g fill="none"><path d="M3.5 3A1.5 1.5 0 0 0 2 4.5v4A1.5 1.5 0 0 0 3.5 10h9A1.5 1.5 0 0 0 14 8.5v-4A1.5 1.5 0 0 0 12.5 3h-9zM3 4.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-4zm.5 6.5A1.5 1.5 0 0 0 2 12.5v4A1.5 1.5 0 0 0 3.5 18h9a1.5 1.5 0 0 0 1.5-1.5v-4a1.5 1.5 0 0 0-1.5-1.5h-9zM3 12.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-4zm14-.063a2.003 2.003 0 0 1-2.5-1.937A2 2 0 0 1 16 8.563a2.005 2.005 0 0 1 1 0a2 2 0 0 1 0 3.874zM16.5 3a.5.5 0 0 1 .5.5v4.041a3.02 3.02 0 0 0-1 0V3.5a.5.5 0 0 1 .5-.5zm0 10.5c-.17 0-.337-.014-.5-.041V17.5a.5.5 0 0 0 1 0v-4.041c-.163.027-.33.041-.5.041z" fill="currentColor"></path></g></svg>
+          <div class="ellipsis">归档</div>
+        </a>
+      </li><li data-path="tags">
+        <a href="/tags">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r="1.5"></circle></g></svg>
+          <div class="ellipsis">标签</div>
+        </a>
+      </li><li data-path="cosy-roadmap">
+        <a href="/cosy-roadmap">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20"><g fill="none"><path d="M9.384 2a1 1 0 0 0-.966.742L4.616 17H2.5a.5.5 0 0 0 0 1h15a.5.5 0 0 0 0-1h-2.116L11.582 2.742A1 1 0 0 0 10.616 2H9.384zM5.651 17l.8-3H11.5a.5.5 0 0 0 0-1H6.717l.534-2H10.5a.5.5 0 0 0 0-1H7.517l1.867-7h1.232l3.733 14H5.651z" fill="currentColor"></path></g></svg>
+          <div class="ellipsis">路线图</div>
+        </a>
+      </li><li data-path="cosy-resume">
+        <a href="/cosy-resume">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20"><g fill="none"><path d="M8.5 4.498a1.5 1.5 0 1 1 3 0a1.5 1.5 0 0 1-3 0zm1.5-2.5a2.5 2.5 0 0 0-2.43 3.086L5.471 4.15a1.761 1.761 0 0 0-2.317.88c-.4.882-.008 1.917.877 2.31L7 8.662v2.287l-1.877 4.645a1.75 1.75 0 0 0 3.245 1.311l1.556-3.849a.073.073 0 0 1 .028-.038a.086.086 0 0 1 .046-.012c.02 0 .035.005.046.012a.074.074 0 0 1 .028.038l1.555 3.849a1.75 1.75 0 0 0 3.245-1.311L13 10.96V8.662l2.968-1.322a1.74 1.74 0 0 0 .877-2.31a1.761 1.761 0 0 0-2.317-.88l-2.097.934a2.5 2.5 0 0 0-2.43-3.086zM4.065 5.444a.761.761 0 0 1 1-.38l3.918 1.744a2.5 2.5 0 0 0 2.034 0l3.918-1.744a.761.761 0 0 1 1 .38a.739.739 0 0 1-.373.983l-2.969 1.321a1 1 0 0 0-.593.914v2.298a1 1 0 0 0 .073.375l1.872 4.633a.75.75 0 0 1-1.39.562l-1.556-3.849c-.364-.9-1.639-.9-2.003 0l-1.555 3.85a.75.75 0 1 1-1.39-.562l1.876-4.646A1 1 0 0 0 8 10.95V8.662a1 1 0 0 0-.593-.914L4.438 6.427a.739.739 0 0 1-.373-.983z" fill="currentColor"></path></g></svg>
+          <div class="ellipsis">简历</div>
+        </a>
+      </li><li data-path="pool">
+        <a href="/pool">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="14.5" r="5"></circle><circle cx="17" cy="7.5" r="3"></circle><path d="M3 3l5 2"></path></g></svg>
+          <div class="ellipsis">台球</div>
+        </a>
+      </li><li data-path="about">
+        <a href="/about">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></g></svg>
+          <div class="ellipsis">关于</div>
+        </a>
+      </li><li data-path="links">
+        <a href="/links">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></g></svg>
+          <div class="ellipsis">友链</div>
+        </a>
+      </li></ul>
+  <ul><li class="">
+        <a href="/categories/AI/">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></g></svg>
+          <div class="ellipsis">
+            <span>AI</span>
+          </div>
+        </a>
+      </li><li class="">
+        <a href="/categories/Hexo/">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><path d="M9 16h6v2H9zm4-7h-2v2H9v2h2v2h2v-2h2v-2h-2z" fill="currentColor"></path><path d="M12 2c-5.33 4.55-8 8.48-8 11.8c0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8zm0 18c-3.35 0-6-2.57-6-6.2c0-2.34 1.95-5.44 6-9.14c4.05 3.7 6 6.79 6 9.14c0 3.63-2.65 6.2-6 6.2z" fill="currentColor"></path></svg>
+          <div class="ellipsis">
+            <span>Hexo</span>
+          </div>
+        </a>
+      </li></ul>
+</nav>
+
+
+<script src="/js/28288782.js"></script>
+
+    </div>
+    <div class="bottom">
+      <cosy-tooltip id="button-preference" placement="right">
+        <span slot="content">
+          <span>偏好</span>
+          <cosy-short-key>⌘</cosy-short-key>
+          <cosy-short-key>p</cosy-short-key>
+        </span>
+        <cosy-icon bordered id="button-about-cosy-theme">
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 16 16">
+            <g fill="none">
+              <path d="M8 6a2 2 0 1 0 0 4a2 2 0 0 0 0-4zM7 8a1 1 0 1 1 2 0a1 1 0 0 1-2 0zm3.618-3.602a.708.708 0 0 1-.824-.567l-.26-1.416a.354.354 0 0 0-.275-.282a6.072 6.072 0 0 0-2.519 0a.354.354 0 0 0-.275.282l-.259 1.416a.71.71 0 0 1-.936.538l-1.359-.484a.355.355 0 0 0-.382.095c-.569.627-1 1.367-1.262 2.173a.352.352 0 0 0 .108.378l1.102.931a.704.704 0 0 1 0 1.076l-1.102.931a.352.352 0 0 0-.108.378A5.986 5.986 0 0 0 3.53 12.02a.355.355 0 0 0 .382.095l1.36-.484a.708.708 0 0 1 .936.538l.258 1.416c.026.14.135.252.275.281a6.075 6.075 0 0 0 2.52 0a.353.353 0 0 0 .274-.281l.26-1.416a.71.71 0 0 1 .936-.538l1.359.484c.135.048.286.01.382-.095c.569-.627 1-1.367 1.262-2.173a.352.352 0 0 0-.108-.378l-1.102-.931a.703.703 0 0 1 0-1.076l1.102-.931a.352.352 0 0 0 .108-.378A5.985 5.985 0 0 0 12.47 3.98a.355.355 0 0 0-.382-.095l-1.36.484a.71.71 0 0 1-.111.03zm-6.62.58l.937.333a1.71 1.71 0 0 0 2.255-1.3l.177-.97a5.105 5.105 0 0 1 1.265 0l.178.97a1.708 1.708 0 0 0 2.255 1.3L12 4.977c.255.334.467.698.63 1.084l-.754.637a1.704 1.704 0 0 0 0 2.604l.755.637a4.99 4.99 0 0 1-.63 1.084l-.937-.334a1.71 1.71 0 0 0-2.255 1.3l-.178.97a5.099 5.099 0 0 1-1.265 0l-.177-.97a1.708 1.708 0 0 0-2.255-1.3L4 11.023a4.987 4.987 0 0 1-.63-1.084l.754-.638a1.704 1.704 0 0 0 0-2.603l-.755-.637c.164-.386.376-.75.63-1.084z" fill="currentColor"></path>
+            </g>
+          </svg>
+        </cosy-icon>
+      </cosy-tooltip>
+    </div>
+  </aside>
+  <main>
+    
+<link rel="stylesheet" href="/css/4dbc8f91.css">
+
+
+<div class="post-container">
+  <header>
+    <div class="left">
+      
+<link rel="stylesheet" href="/css/7d333f9e.css">
+
+<nav class="breadcrumb">
+  <section>
+    <cosy-tooltip placement="bottom-left">
+      <span slot="content"><span>首页</span>
+        <cosy-short-key>⌘</cosy-short-key>
+        <cosy-short-key>H</cosy-short-key>
+      </span>
+      <cosy-icon href="/">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20">
+          <g fill="none">
+            <path d="M8.998 2.388a1.5 1.5 0 0 1 2.005 0l5.5 4.942A1.5 1.5 0 0 1 17 8.445V15.5a1.5 1.5 0 0 1-1.5 1.5H13a1.5 1.5 0 0 1-1.5-1.5V12a.5.5 0 0 0-.5-.5H9a.5.5 0 0 0-.5.5v3.5A1.5 1.5 0 0 1 7 17H4.5A1.5 1.5 0 0 1 3 15.5V8.445c0-.425.18-.83.498-1.115l5.5-4.942zm1.336.744a.5.5 0 0 0-.668 0l-5.5 4.942A.5.5 0 0 0 4 8.445V15.5a.5.5 0 0 0 .5.5H7a.5.5 0 0 0 .5-.5V12A1.5 1.5 0 0 1 9 10.5h2a1.5 1.5 0 0 1 1.5 1.5v3.5a.5.5 0 0 0 .5.5h2.5a.5.5 0 0 0 .5-.5V8.445a.5.5 0 0 0-.166-.371l-5.5-4.942z" fill="currentColor"></path>
+          </g>
+        </svg>
+      </cosy-icon>
+    </cosy-tooltip>
+    
+    
+    <svg class="arrow" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 20">
+      <g fill="none">
+        <path d="M7.733 4.207a.75.75 0 0 1 1.06.026l5.001 5.25a.75.75 0 0 1 0 1.035l-5 5.25a.75.75 0 1 1-1.087-1.034L12.216 10l-4.51-4.734a.75.75 0 0 1 .027-1.06z" fill="currentColor"></path>
+      </g>
+    </svg>
+    <span class="ellipsis">
+      台球小游戏
+    </span>
+    
+  </section>
+</nav>
+
+
+<script src="/js/31d6cfe0.js"></script>
+
+    </div>
+  </header>
+  <div class="content">
+    <main class="cosy-scrollbar">
+      <div class="article-container">
+        <article>
+          <h1 class="post-title">台球小游戏</h1>
+          <p>在博客里塞了个能真的打完一局的<strong>经典 8 球台球</strong>：纯前端 Canvas2D 实现，带 AI 对手（4 档难度），也支持双人对战。</p>
+<div class="pool-card">
+  <h3>怎么玩</h3>
+  <ul>
+    <li><strong>瞄准</strong>：移动鼠标，球杆会跟着转</li>
+    <li><strong>蓄力</strong>：按住 <span class="pool-keys">W</span> 加力、<span class="pool-keys">S</span> 减力（力度条最长 75）</li>
+    <li><strong>击球</strong>：力度大于 0 时点击鼠标左键出杆</li>
+    <li><strong>规则</strong>：开球后先打进的那一色归你，最后打进 8 号球者获胜；提前进 8 号球或打进对方的球要交换球权</li>
+  </ul>
+</div>
+
+<div class="pool-actions">
+  <button class="pool-btn" id="pool-start" type="button">▶ 开始游戏</button>
+  <a class="pool-link" href="/games/pool/" target="_blank" rel="noopener">全屏单独打开 ↗</a>
+</div>
+
+<div class="pool-stage" id="pool-stage">
+  <div class="pool-placeholder">
+    <strong>点击上面的「开始游戏」载入球桌</strong>
+    <span>素材约 3.4 MB，载入后即可开球</span>
+  </div>
+</div>
+
+<p class="pool-tip">建议在电脑端用鼠标玩（游戏本身只支持鼠标 + 键盘，触屏没法瞄准）。音乐默认开启，右上角有静音按钮。</p>
+
+<link rel="stylesheet" href="/pool/pool.css">
+<script src="/pool/pool.js" defer></script>
+
+        </article>
+      </div>
+    </main>
+  </div>
+</div>
+
+  </main>
+<!-- hexo injector body_end start --><script src="/js/enhance.js"></script><script src="/js/search.js"></script><script src="/js/ba-fx.js"></script><script src="/js/liquid-glass.js"></script><!-- hexo injector body_end end --></body>
+
+<script>
+  window.theme = {
+    color: 'hsl(238,50%,56%)'
+  }
+</script>
+
+
+<script src="/js/69d42414.js"></script>
+
+
+</html>
