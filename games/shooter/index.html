@@ -428,12 +428,42 @@
   var overlay = document.getElementById("overlay");
   var hud = document.getElementById("hud");
 
+  var fullscreenRequested = false;
+  var lockRetry = null;
+
+  /* 按 Esc 退出锁定后，浏览器会在约 1 秒内拒绝再次锁定（并触发 pointerlockerror），
+     这里自动延迟重试一次；仍失败就提示玩家再点一下，避免出现「点了没反应」。 */
+  function handleLockError() {
+    if (pointerLocked) return;
+    clearTimeout(lockRetry);
+    lockRetry = setTimeout(function () {
+      if (pointerLocked) return;
+      try { renderer.domElement.requestPointerLock(); } catch (e) {}
+      setTimeout(function () { if (!pointerLocked) toast("请再点一下画面继续游戏"); }, 500);
+    }, 1300);
+  }
+
+  function requestLock() {
+    if (pointerLocked) return;
+    try {
+      var p = renderer.domElement.requestPointerLock();
+      if (p && typeof p.catch === "function") p.catch(handleLockError);
+    } catch (e) { handleLockError(); }
+  }
+
+  document.addEventListener("pointerlockerror", handleLockError);
+
+  /* 注意：这里不能再用 started 做提前返回 —— 暂停后 started 仍为 true，
+     会导致点「继续」直接被拦掉、永远锁不上鼠标。改为只判断当前是否已锁定。 */
   function startGame() {
-    if (started) return;
-    // 独立打开时自动全屏：全屏下浏览器不响应触控板「滑动前进/后退」，指针锁定不会被抢
-    // （嵌入 iframe 时由外层博客页负责全屏，这里不重复请求，避免嵌套全屏）
-    if (window.self === window.top) toggleFullscreen();
-    renderer.domElement.requestPointerLock();
+    if (pointerLocked) return;
+    // 仅首次开始、且是独立打开时自动全屏（全屏下浏览器不响应触控板滑动导航；
+    // 嵌入 iframe 时由外层博客页负责全屏，避免嵌套全屏）
+    if (!fullscreenRequested && window.self === window.top) {
+      fullscreenRequested = true;
+      toggleFullscreen();
+    }
+    requestLock();
   }
   overlay.addEventListener("click", startGame);
 
@@ -771,8 +801,12 @@
     setWeaponPos();
 
     // 狙击镜
-    document.getElementById("scope").style.display = (aiming && WPN[cur].scope) ? "block" : "none";
-    document.getElementById("crosshair").style.opacity = (aiming && WPN[cur].scope) ? 0 : 0.9;
+    // 开镜时枪正好停在镜筒中央，会把这唯一的观察孔堵死 —— 必须把枪身隐藏，
+    // 只留 CSS 镜筒贴图（真实 FPS 的高倍镜也是切到镜筒画面，同理）。
+    var scoped = aiming && WPN[cur].scope;
+    weaponHolder.visible = !scoped;
+    document.getElementById("scope").style.display = scoped ? "block" : "none";
+    document.getElementById("crosshair").style.opacity = scoped ? 0 : 0.9;
 
     // 靶子更新
     for (var k = 0; k < targets.length; k++) {
