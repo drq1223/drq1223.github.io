@@ -1,0 +1,3536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>城市靶场 · City Shooting Range</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* overscroll-behavior: none 是关键——阻止横向滚动量溢出成浏览器的「滑动前进/后退」手势 */
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #0b0e14;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; touch-action: none; -webkit-user-drag: none; }
+
+  /* 准星 */
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 26px; height: 26px; pointer-events: none; opacity: .9; z-index: 5;
+    transition: opacity .15s;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: rgba(255,255,255,.85);
+    box-shadow: 0 0 2px rgba(0,0,0,.9);
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+  #crosshair.hit::before, #crosshair.hit::after { background: #ff5b5b; }
+
+  /* 命中标记 */
+  #hitmarker {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(45deg);
+    width: 22px; height: 22px; z-index: 6; pointer-events: none; opacity: 0;
+  }
+  #hitmarker span { position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #hitmarker span:nth-child(1){ left:50%; top:0; width:2px; height:10px; transform:translateX(-50%);}
+  #hitmarker span:nth-child(2){ left:50%; bottom:0; width:2px; height:10px; transform:translateX(-50%);}
+  #hitmarker span:nth-child(3){ top:50%; left:0; height:2px; width:10px; transform:translateY(-50%);}
+  #hitmarker span:nth-child(4){ top:50%; right:0; height:2px; width:10px; transform:translateY(-50%);}
+  #hitmarker.show { animation: hm .25s ease-out; }
+  @keyframes hm { 0%{opacity:1;transform:translate(-50%,-50%) rotate(45deg) scale(.6);} 100%{opacity:0;transform:translate(-50%,-50%) rotate(45deg) scale(1.2);} }
+
+  /* 狙击镜遮罩 */
+  #scope {
+    position: fixed; inset: 0; z-index: 7; pointer-events: none; display: none;
+    background: radial-gradient(circle at 50% 50%, transparent 0 27vh, rgba(0,0,0,.96) 30vh 100%);
+  }
+  #scope::before {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 54vh; height: 54vh;
+    transform: translate(-50%,-50%); border-radius: 50%;
+    box-shadow: 0 0 0 4vh rgba(0,0,0,.96), inset 0 0 40px rgba(0,0,0,.8);
+    border: 2px solid rgba(20,20,20,.9);
+  }
+  #scope .reticle { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:54vh; height:54vh; }
+  #scope .reticle::before, #scope .reticle::after { content:""; position:absolute; background:rgba(255,255,255,.85); }
+  #scope .reticle::before { left:50%; top:8%; width:1.5px; height:84%; transform:translateX(-50%); }
+  #scope .reticle::after  { top:50%; left:8%; height:1.5px; width:84%; transform:translateY(-50%); }
+  #scope .ring { position:absolute; left:50%; top:50%; width:54vh; height:54vh; transform:translate(-50%,-50%); border-radius:50%; border:3px solid rgba(0,0,0,.9); }
+
+  /* HUD */
+  #hud {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; pointer-events: none;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 18px 26px; color: #e9eef5; text-shadow: 0 1px 3px rgba(0,0,0,.9);
+    font-variant-numeric: tabular-nums;
+  }
+  #wpn { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+  #wpn small { display:block; font-size: 12px; font-weight: 400; opacity:.7; letter-spacing:0; }
+  #ammoBox { text-align: center; flex: 0 0 auto; }
+  #ammo { font-size: 40px; font-weight: 800; line-height: 1; }
+  #ammo .mag { opacity: .55; font-size: 22px; }
+  #ammo.reloading { color: #ffd45b; }
+  /* 换弹进度条 */
+  #reloadbar {
+    width: 168px; height: 6px; margin: 8px auto 0; border-radius: 999px;
+    background: rgba(255,255,255,.16); overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.7); opacity: 0; transition: opacity .12s;
+  }
+  #reloadbar.on { opacity: 1; }
+  #reloadbar i {
+    display: block; height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, #ffd45b, #ffb020);
+    box-shadow: 0 0 8px rgba(255,190,60,.65);
+  }
+  #stats { text-align: right; font-size: 14px; line-height: 1.6; }
+  #stats b { font-size: 20px; }
+
+  /* 血量条（联机时用） */
+  #hpbar {
+    position: fixed; left: 26px; bottom: 92px; z-index: 4; width: 190px; height: 9px;
+    border-radius: 999px; background: rgba(0,0,0,.5); overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.7); display: none;
+  }
+  #hpbar i { display:block; height:100%; width:100%; background: linear-gradient(90deg,#4ade80,#22c55e); transition: width .15s, background .3s; }
+  #hpbar.low i { background: linear-gradient(90deg,#f87171,#dc2626); }
+
+  /* 计时 / 挑战模式 */
+  #timer {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 6;
+    text-align: center; color: #eaf1f8; text-shadow: 0 2px 6px rgba(0,0,0,.9);
+    background: rgba(10,14,20,.55); padding: 8px 22px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.14);
+  }
+  #timer #timeleft { font-size: 32px; font-weight: 800; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+  #timer small { display:block; font-size: 11px; opacity: .7; letter-spacing: 2px; }
+  #timer.urgent #timeleft { color: #ff6b6b; animation: tk .5s ease-in-out infinite; }
+  @keyframes tk { 0%,100%{transform:scale(1);} 50%{transform:scale(1.08);} }
+
+  /* 击杀提示（联机） */
+  #killfeed {
+    position: fixed; top: 78px; right: 20px; z-index: 6; width: 320px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none;
+  }
+  #killfeed div {
+    background: rgba(10,14,20,.72); color: #eaf1f8; font-size: 13px;
+    padding: 6px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12);
+    animation: kf 4s forwards;
+  }
+  #killfeed div b { color: #7fd1ff; }
+  @keyframes kf { 0%{opacity:0;transform:translateX(20px);} 8%{opacity:1;transform:translateX(0);} 85%{opacity:1;} 100%{opacity:0;} }
+
+  /* 开始 / 暂停遮罩
+     —— 外层负责滚动，内层 .wrap 用 margin:auto 居中。
+     这样在「iframe 16:9 矮视口」里内容超高时不会把顶部标题裁掉。 */
+  #overlay {
+    position: fixed; inset: 0; z-index: 20; display: flex; overflow-y: auto;
+    background: radial-gradient(circle at 50% 35%, rgba(20,30,45,.9), rgba(6,9,14,.97));
+    color: #eaf1f8; text-align: center; padding: 14px 16px;
+  }
+  #overlay .wrap {
+    margin: auto; display: flex; flex-direction: column; align-items: center;
+    gap: 9px; cursor: pointer; width: min(920px, 96vw);
+  }
+  #overlay h1 { font-size: clamp(19px, 2.5vw, 30px); letter-spacing: 2px; }
+  #overlay .lead { max-width: 720px; line-height: 1.5; opacity: .75; font-size: 12.5px; }
+  #overlay .keys { display:grid; grid-template-columns: repeat(3, minmax(96px,1fr)); gap:4px 14px; font-size:11.5px; opacity:.85; text-align:left; }
+  #overlay .keys b { color:#7fd1ff; }
+  #overlay .start {
+    margin-top: 4px; padding: 11px 34px; border: 2px solid #7fd1ff; border-radius: 999px;
+    font-size: 16px; font-weight: 700; letter-spacing: 2px; background: rgba(127,209,255,.08);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(127,209,255,.35);} 50%{box-shadow:0 0 22px 4px rgba(127,209,255,.35);} }
+  #overlay .credit { font-size:10.5px; opacity:.4; }
+  .hidden { display: none !important; }
+
+  /* Edge 内置鼠标手势冲突提示（UA 命中 Edge 时由 JS 打开） */
+  #overlay .edgewarn {
+    display: none; font-size: 11.5px; line-height: 1.55; max-width: 720px;
+    padding: 8px 13px; border-radius: 9px; text-align: left;
+    background: rgba(255,170,64,.12); border: 1px solid rgba(255,170,64,.42); color: #ffd3a3;
+  }
+  #overlay .edgewarn b { color: #ffb457; }
+  #overlay .edgewarn.on { display: block; }
+
+  /* 双栏布局：宽屏并排，窄屏自动堆叠 */
+  #overlay .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; width: 100%; }
+  #overlay .col { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+  @media (max-width: 700px) { #overlay .cols { grid-template-columns: 1fr; } }
+
+  /* 面板通用（遮罩内可交互区域） */
+  .panel {
+    pointer-events: auto; cursor: default;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 11px 14px; width: 100%; text-align: left;
+  }
+  .panel h3 { font-size: 12px; letter-spacing: 2px; opacity: .7; margin-bottom: 8px; font-weight: 700; text-align: center; }
+
+  /* 模式选择 */
+  #modes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  #modes button {
+    pointer-events: auto; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700;
+    padding: 8px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.05); color: #eaf1f8; transition: .15s;
+  }
+  #modes button:hover { background: rgba(127,209,255,.14); }
+  #modes button.on { background: rgba(127,209,255,.22); border-color: #7fd1ff; color: #fff; }
+  #modes button small { display:block; font-weight:400; font-size:11px; opacity:.65; margin-top:2px; }
+
+  /* 设置：灵敏度 */
+  .row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 12.5px; }
+  .row label { flex: 0 0 92px; text-align: left; opacity: .85; }
+  .row input[type=range] { flex: 1; accent-color: #7fd1ff; height: 18px; cursor: pointer; }
+  .row .val { flex: 0 0 56px; text-align: right; font-variant-numeric: tabular-nums; color: #7fd1ff; font-weight: 700; }
+  .row .hint { font-size: 11px; opacity: .5; }
+
+  /* 鼠标手势高亮提示（设置内最显眼的告警：解决开镜被浏览器手势劫持） */
+  .gesture-alert {
+    margin: 0 0 11px; padding: 9px 12px; border-radius: 10px; text-align: left;
+    background: linear-gradient(180deg, rgba(255,69,58,.20), rgba(255,69,58,.10));
+    border: 2px solid #ff5b5b; color: #ffd9d4; font-size: 12px; line-height: 1.55;
+    box-shadow: 0 0 0 3px rgba(255,69,58,.12), 0 2px 10px rgba(0,0,0,.4);
+    animation: galert 1.7s ease-in-out infinite;
+  }
+  @keyframes galert {
+    0%,100% { box-shadow: 0 0 0 3px rgba(255,69,58,.12), 0 2px 10px rgba(0,0,0,.4); }
+    50%     { box-shadow: 0 0 0 6px rgba(255,69,58,.30), 0 2px 16px rgba(255,69,58,.4); }
+  }
+  .gesture-alert .big { display:block; font-size: 14px; font-weight: 800; color:#ff9181; letter-spacing:.5px; margin-bottom: 4px; }
+  .gesture-alert b { color:#ff7b6b; font-weight:800; }
+  .gesture-alert .steps { margin-top:5px; display:block; }
+  .seg { display: flex; gap: 6px; }
+  .seg button {
+    pointer-events: auto; cursor: pointer; font: inherit; font-size: 12px; padding: 5px 14px;
+    border-radius: 8px; border: 1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.04); color: #eaf1f8;
+  }
+  .seg button.on { background: rgba(127,209,255,.22); border-color: #7fd1ff; }
+
+  /* 联机面板 */
+  #mpbox .mpRow { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+  #mpbox input[type=text] {
+    pointer-events: auto; font: inherit; font-size: 13px; letter-spacing: 2px; text-align: center;
+    flex: 1 1 70px; min-width: 62px; padding: 7px 8px; border-radius: 8px; text-transform: uppercase;
+    border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.3); color: #fff;
+  }
+  #mpbox button {
+    pointer-events: auto; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700;
+    padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.05); color: #eaf1f8; white-space: nowrap;
+  }
+  #mpbox button:hover { background: rgba(127,209,255,.16); }
+  #mpbox button.pri { background: rgba(127,209,255,.22); border-color: #7fd1ff; }
+  #mpStatus { font-size: 11.5px; margin-top: 7px; opacity: .85; line-height: 1.45; }
+  #mpStatus .ok { color: #4ade80; } #mpStatus .err { color: #f87171; } #mpStatus .wait { color: #7fd1ff; }
+  #mpPlayers { font-size: 11.5px; margin-top: 5px; display: flex; gap: 8px; flex-wrap: wrap; opacity: .85; }
+  #mpPlayers span { background: rgba(255,255,255,.08); padding: 2px 10px; border-radius: 999px; }
+  .nick {
+    pointer-events: auto; font: inherit; font-size: 14px; width: 150px; padding: 7px 10px;
+    border-radius: 9px; border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.3); color: #fff;
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed; top: 22px; left: 50%; transform: translateX(-50%); z-index: 30;
+    background: rgba(10,14,20,.88); color:#fff; padding: 8px 18px; border-radius: 999px;
+    font-size: 14px; opacity: 0; transition: opacity .25s; pointer-events: none; border:1px solid rgba(255,255,255,.12);
+  }
+  #toast.show { opacity: 1; }
+
+  /* 载具 HUD：靠近提示 / 驾驶时的速度车损 */
+  #carhud {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 30;
+    background: rgba(10,14,20,.88); color:#fff; padding: 8px 18px; border-radius: 999px;
+    font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; border:1px solid rgba(255,255,255,.12);
+  }
+  #carhud.on { opacity: 1; }
+
+  /* 结算面板 */
+  #result {
+    position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    background: rgba(6,9,14,.94); color: #eaf1f8; text-align: center;
+  }
+  #result h2 { font-size: 30px; letter-spacing: 3px; }
+  #result .sub { font-size: 13px; opacity: .7; }
+  #rgrid { display: grid; grid-template-columns: repeat(4, minmax(90px,1fr)); gap: 12px; margin-top: 6px; }
+  #rgrid div { background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 14px 10px; }
+  #rgrid b { display:block; font-size: 30px; font-weight: 800; color: #7fd1ff; font-variant-numeric: tabular-nums; }
+  #rgrid small { font-size: 11.5px; opacity: .7; letter-spacing: 1px; }
+  #rbest { font-size: 14px; opacity: .85; }
+  #rbest b { color: #ffd45b; }
+  #result .btns { display: flex; gap: 12px; margin-top: 6px; }
+  #result button {
+    cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; padding: 12px 28px;
+    border-radius: 999px; border: 2px solid #7fd1ff; background: rgba(127,209,255,.1); color: #eaf1f8;
+  }
+  #result button.ghost { border-color: rgba(255,255,255,.25); background: transparent; }
+
+  /* 排行榜 */
+  #boardList, #rboardList { font-size: 11.5px; margin-top: 2px; }
+  .brow {
+    display: grid; grid-template-columns: 22px 1fr 44px 40px; gap: 6px;
+    align-items: center; padding: 3px 2px; border-bottom: 1px solid rgba(255,255,255,.07);
+  }
+  .brow:last-child { border-bottom: none; }
+  .brow .rk { font-weight: 800; color: #ffd45b; text-align: center; font-variant-numeric: tabular-nums; }
+  .brow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .9; }
+  .brow .ht { text-align: right; font-weight: 700; color: #7fd1ff; font-variant-numeric: tabular-nums; }
+  .brow .ac { text-align: right; opacity: .55; font-variant-numeric: tabular-nums; }
+  .brow.me { background: rgba(127,209,255,.14); border-radius: 6px; }
+  .brow.me .nm { color: #7fd1ff; font-weight: 700; }
+  .bempty { opacity: .5; font-size: 11px; text-align: center; padding: 9px 0; line-height: 1.5; }
+  #boardTip { font-size: 10.5px; opacity: .5; margin-top: 5px; line-height: 1.45; }
+  #rrank { font-size: 15px; font-weight: 800; color: #ffd45b; letter-spacing: .5px; }
+  #rboardWrap {
+    margin-top: 10px; width: min(420px, 88vw); background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 10px 12px; text-align: left;
+  }
+  #rboardWrap .bt { font-size: 11px; letter-spacing: 2px; opacity: .6; text-align: center; margin-bottom: 4px; }
+  /* ---------- 屏幕摇杆模式（触屏 / 鼠标通用） ---------- */
+  #joy { position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 25; touch-action: none;
+         -webkit-user-select: none; user-select: none; }
+  #joy.hidden { display: none; }
+  #joyLook { position: absolute; right: 0; top: 0; width: 56%; height: 100%; }
+  #joyBase { position: absolute; left: 24px; bottom: 24px; width: 136px; height: 136px; border-radius: 50%;
+             background: rgba(255,255,255,.10); border: 2px solid rgba(255,255,255,.28); }
+  #joyKnob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px;
+             border-radius: 50%; background: rgba(127,209,255,.55); border: 2px solid rgba(255,255,255,.6); }
+  #joyBtns { position: absolute; right: 18px; bottom: 18px; width: 200px; height: 200px; }
+  #joyBtns button { position: absolute; padding: 0; border-radius: 50%; color: #eaf1f8;
+                    font-size: 13px; font-weight: 500; background: rgba(255,255,255,.14);
+                    border: 2px solid rgba(255,255,255,.35); }
+  #joyFire { right: 0; bottom: 0; width: 88px; height: 88px; background: rgba(226,75,74,.45); }
+  #joyAim { right: 14px; bottom: 100px; width: 62px; height: 62px; }
+  #joyJump { right: 100px; bottom: 12px; width: 62px; height: 62px; }
+  #joyReload { right: 106px; bottom: 86px; width: 56px; height: 56px; }
+  #joyCar { right: 152px; bottom: 28px; width: 56px; height: 56px; }
+  #joyPause { position: absolute; right: 14px; top: 14px; width: 46px; height: 46px; padding: 0;
+              border-radius: 50%; font-size: 12px; color: #eaf1f8; background: rgba(10,14,20,.55);
+              border: 2px solid rgba(255,255,255,.3); }
+  #joyTip { position: absolute; left: 0; right: 0; top: 14px; text-align: center; font-size: 12px;
+            color: rgba(234,241,248,.55); pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="crosshair"></div>
+<div id="hitmarker"><span></span><span></span><span></span><span></span></div>
+<div id="scope"><div class="reticle"></div><div class="ring"></div></div>
+
+<div id="hud" class="hidden">
+  <div id="wpn">突击步枪<small>ASSAULT RIFLE · 全自动</small></div>
+  <div id="ammoBox">
+    <div id="ammo"><span class="now">30</span><span class="mag"> / 30</span></div>
+    <div id="reloadbar"><i></i></div>
+  </div>
+  <div id="stats">得分 <b id="score">0</b><br>爆头 <b id="hs">0</b> · 命中率 <b id="acc">0%</b></div>
+</div>
+
+<div id="hpbar"><i></i></div>
+
+<div id="timer" class="hidden"><span id="timeleft">60</span><small>剩余时间</small></div>
+<div id="killfeed"></div>
+<div id="toast"></div>
+<div id="carhud"></div>
+
+<div id="joy" class="hidden">
+  <div id="joyTip">左侧摇杆移动 · 右侧滑动转视角</div>
+  <div id="joyLook"></div>
+  <button id="joyPause">暂停</button>
+  <div id="joyBase"><div id="joyKnob"></div></div>
+  <div id="joyBtns">
+    <button id="joyFire">开火</button>
+    <button id="joyAim">开镜</button>
+    <button id="joyJump">跳</button>
+    <button id="joyReload">换弹</button>
+    <button id="joyCar">车</button>
+  </div>
+</div>
+
+<div id="overlay">
+ <div class="wrap">
+  <h1>城市靶场 · City Shooting Range</h1>
+  <p class="lead">紧凑低多边形街区里的 FPS 巷战：敌人会巡逻、靠近你并向你开火，你有血量、被击倒 3 秒后重生。突击步枪 + 狙击枪 + 无托步枪，场景内散布可挡枪的掩体。支持 <b>60 秒计时挑战</b> 与 <b>房间码联机</b>。</p>
+
+  <div class="cols">
+    <div class="col">
+      <div class="panel" id="modesBox">
+        <h3>模式</h3>
+        <div id="modes">
+          <button data-mode="free" class="on">自由练习<small>无限时间 · 敌人持续刷新并向你交火</small></button>
+          <button data-mode="challenge">60 秒挑战<small>限时刷分 · 出结算与最佳成绩</small></button>
+        </div>
+      </div>
+
+      <div class="panel" id="setbox">
+        <h3>操作与手感</h3>
+        <div class="gesture-alert">
+          <span class="big">⚠ 请先在浏览器设置里关闭「鼠标手势」</span>
+          按住<b>右键</b>开镜时，浏览器自带的鼠标手势会把拖动识别成「前进 / 后退 / 滚动」，导致开镜失灵或弹出「无效手势」气泡。<br>
+          <span class="steps"><b>Edge</b>：设置 → 外观 → 浏览器行为和功能 → 关闭「启用鼠标手势」，重启浏览器生效。<br>
+          <b>Chrome</b>：到扩展程序关掉鼠标手势类插件；系统级手势去系统设置关。<br>
+          不想改设置？游戏内直接用 <b>C</b>（切换）开镜即可（Shift 现在是跑步键）。</span>
+        </div>
+        <div class="row">
+          <label>鼠标灵敏度</label>
+          <input type="range" id="sSens" min="10" max="400" value="100">
+          <span class="val" id="sSensV">1.00</span>
+        </div>
+        <div class="row">
+          <label>开镜灵敏度</label>
+          <input type="range" id="sAds" min="20" max="200" value="85">
+          <span class="val" id="sAdsV">0.85</span>
+        </div>
+        <div class="row">
+          <label>开镜方式</label>
+          <div class="seg" id="segAds">
+            <button data-v="hold" class="on">按住右键</button>
+            <button data-v="toggle">按一下切换</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>操控方式</label>
+          <div class="seg" id="segCtrl">
+            <button data-v="kb" class="on">键盘 + 鼠标</button>
+            <button data-v="stick">屏幕摇杆</button>
+          </div>
+          <span class="hint">摇杆可触屏玩</span>
+        </div>
+        <div class="row">
+          <label>时段</label>
+          <div class="seg" id="segNight">
+            <button data-v="0" class="on">白天</button>
+            <button data-v="1">夜晚</button>
+          </div>
+          <span class="hint">夜间亮灯</span>
+        </div>
+        <div class="row">
+          <label>纵向反转</label>
+          <div class="seg" id="segInv">
+            <button data-v="0" class="on">关</button>
+            <button data-v="1">开</button>
+          </div>
+          <span class="hint">设置自动保存</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel" id="mpbox">
+        <h3>联机（房间码 · 无需注册）</h3>
+        <div class="mpRow">
+          <input type="text" class="nick" id="nick" maxlength="10" placeholder="昵称">
+          <input type="text" id="room" maxlength="6" placeholder="房间码">
+          <button id="mpJoin" class="pri">加入 / 创建</button>
+          <button id="mpRand">随机</button>
+          <button id="mpLeave">退出</button>
+        </div>
+        <div id="mpStatus">未连接 · 单人练习中</div>
+        <div id="mpPlayers"></div>
+      </div>
+
+      <div class="panel">
+        <h3>排行榜 · 60 秒挑战</h3>
+        <div id="boardList"><div class="bempty">加载中…</div></div>
+        <div id="boardTip">名字取自你的 IP（末段打码保护隐私）</div>
+      </div>
+
+      <div class="panel">
+        <h3>操作</h3>
+        <div class="keys">
+          <div><b>WASD</b> 移动</div><div><b>鼠标</b> 瞄准</div><div><b>左键</b> 开火</div>
+          <div><b>Shift</b> 跑步（配合 WASD）</div><div><b>Space</b> 跳跃</div><div><b>Ctrl</b> 蹲下 / 站起</div>
+          <div><b>右键 / C</b> 开镜</div><div><b>R</b> 换弹（打空自动）</div><div><b>1/2/3/4</b> 换枪（3=RPG）</div>
+          <div><b>V</b> 全屏</div><div><b>F</b> 上/下车</div><div><b>Esc</b> 暂停</div><div><b>Tab</b> 联机状态</div>
+          <div><b>摇杆模式</b> 在「操作与手感」里切换 · 触屏也能玩</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="start">点击开始（锁定鼠标）</div>
+  <div class="edgewarn" id="edgeWarn">
+    <b>检测到 Edge 浏览器</b>：Edge 121 起默认开启内置「鼠标手势」——按住<b>右键</b>拖动会被识别成「向下滚动 / 前进 / 后退」，正好和「按住右键开镜」冲突（你会看到「向下滚动」气泡或「无效手势」提示）。<br>
+    解决：<b>Edge 设置 → 外观 → 浏览器行为和功能</b> → 关闭「启用鼠标手势」，重启浏览器后生效。临时办法：改用 <b>C</b>（切换）开镜。
+  </div>
+  <p style="font-size:11.5px;opacity:.55;">触控板玩家建议先按 <b>V</b> 全屏，避免系统把滑动当成「前进/后退」手势</p>
+  <div class="credit">Built with Three.js · 程序化低多边形模型 · 联机经公共 MQTT 中继</div>
+ </div>
+</div>
+
+<div id="result" class="hidden">
+  <h2>挑战结束</h2>
+  <div class="sub" id="rSub">60 秒 · 城市靶场</div>
+  <div id="rgrid">
+    <div><b id="rHits">0</b><small>命中</small></div>
+    <div><b id="rHs">0</b><small>爆头</small></div>
+    <div><b id="rAcc">0%</b><small>命中率</small></div>
+    <div><b id="rRate">0.0</b><small>命中 / 秒</small></div>
+  </div>
+  <div id="rbest">历史最佳：<b id="rBestHits">—</b> 命中 · <b id="rBestRate">—</b> /秒</div>
+  <div id="rboardWrap">
+    <div class="bt">排 行 榜</div>
+    <div style="text-align:center;margin-bottom:6px;">本次成绩：<span id="rrank">—</span></div>
+    <div id="rboardList"><div class="bempty">—</div></div>
+  </div>
+  <div class="btns">
+    <button id="rAgain">再来一次</button>
+    <button id="rBack" class="ghost">返回自由练习</button>
+  </div>
+</div>
+
+<script src="./assets/lib/three.min.js"></script>
+<script>
+"use strict";
+(function () {
+  if (!window.THREE) {
+    document.getElementById("overlay").innerHTML =
+      '<h1>加载失败</h1><p>Three.js 资源未能加载，请刷新重试。</p>';
+    return;
+  }
+  var THREE = window.THREE;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ==================================================================
+     0. 设置持久化（灵敏度 / 开镜方式 / 昵称）
+     ================================================================== */
+  var LS_KEY = "cityRange.settings.v1";
+  var SET = { sens: 1.0, ads: 0.85, adsMode: "hold", ctrl: "kb", yInv: false, night: false, nick: "", room: "" };
+  try {
+    var raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      var o = JSON.parse(raw);
+      for (var k in o) if (k in SET) SET[k] = o[k];
+    }
+  } catch (e) {}
+  function saveSet() { try { localStorage.setItem(LS_KEY, JSON.stringify(SET)); } catch (e) {} }
+
+  var BEST_KEY = "cityRange.best.v1";
+  var BEST = { hits: 0, rate: 0, hs: 0, acc: 0 };
+  try {
+    var rb = localStorage.getItem(BEST_KEY);
+    if (rb) { var ob = JSON.parse(rb); for (var kb in ob) if (kb in BEST) BEST[kb] = ob[kb]; }
+  } catch (e2) {}
+
+  /* ==================================================================
+     1. 浏览器导航守卫
+     ------------------------------------------------------------------
+     某些环境（触控板手势、鼠标侧键、右键 + 拖动）会被浏览器解释成
+     「前进 / 后退」，一旦真的导航走，指针锁定被释放、游戏直接中断。
+     这里用 popstate 拦截 + 重新 pushState 抵消，并对 auxclick
+     （中键 / 侧键）preventDefault —— Chrome 支持用 auxclick 拦住
+     鼠标侧键导航。
+     ================================================================== */
+  var leaving = false;      // 玩家主动点「返回博客」时放开守卫，避免把人困在游戏页
+  (function guardNavigation() {
+    if (!window.history || !history.pushState) return;
+    var push = function () { try { history.pushState({ guard: 1 }, ""); } catch (e) {} };
+    push();
+    window.addEventListener("popstate", function () {
+      // 只在游戏进行中拦截；暂停状态下允许正常返回上一页
+      if (leaving || !(pointerLocked || started)) return;
+      push();
+      toast("已阻止页面跳转（游戏进行中）");
+    });
+    // 中键 / 侧键（button 1/3/4）默认行为：新标签页打开、前进 / 后退
+    window.addEventListener("auxclick", function (e) { e.preventDefault(); }, { passive: false });
+    window.addEventListener("mousedown", function (e) {
+      if (e.button !== 0 && e.cancelable && !inPanel(e.target)) e.preventDefault();
+    }, { passive: false });
+  })();
+
+  function inPanel(el) {
+    while (el && el !== document.body) {
+      if (el.classList && (el.classList.contains("panel") || el.id === "result")) return true;
+      el = el.parentNode;
+    }
+    return false;
+  }
+
+  /* ==================================================================
+     2. 基础场景（紧凑地图）
+     ================================================================== */
+  var container = $("app");
+  var renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+
+  // 地图规模：紧凑型练枪场 —— 街道网格切开城市，中央 4 个街区留空作为交战广场
+  var MAP = { half: 62, ground: 180, coverR: 31, spawnZ: 26 };
+
+  /* ---- 城市网格：道路与街区 ----
+     5 纵 5 横道路，中心线 ±60 / ±30 / 0，路宽 12m；
+     道路切出 6×6 个街区，中央 4 个留空（交战广场），其余 32 个街区盖楼。
+     地面纹理（makeCityTexture）和建筑（buildCity）共用这套坐标，严格对齐。 */
+  var ROADS = [-60, -30, 0, 30, 60];
+  var ROAD_HW = 6;                                  // 路半宽 → 路宽 12m
+  var SIDEWALK = 3;                                 // 人行道宽
+  var CITY_BLOCKS = (function () {
+    var cuts = [-90, -66, -54, -36, -24, -6, 6, 24, 36, 54, 66, 90];
+    var one = [];
+    for (var i = 0; i < cuts.length - 1; i += 2) one.push({ x0: cuts[i], x1: cuts[i + 1] });
+    var out = [];
+    for (var a = 0; a < one.length; a++) for (var b = 0; b < one.length; b++) {
+      var isCentral = (one[a].x0 === -24 || one[a].x0 === 6) && (one[b].x0 === -24 || one[b].x0 === 6);
+      out.push({ x0: one[a].x0, x1: one[a].x1, z0: one[b].x0, z1: one[b].x1, central: isCentral });
+    }
+    return out;
+  })();
+
+  // 白天 / 夜晚两套天空，切换时整体换掉背景、雾和光照
+  var skyDay = makeSkyTexture(false), skyNight = makeSkyTexture(true);
+  var scene = new THREE.Scene();
+  scene.background = skyDay;
+  scene.fog = new THREE.Fog(0x9fb4c7, 45, 160);
+
+  var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 800);
+  camera.rotation.order = "YXZ";
+  var BASE_FOV = 75;
+
+  var ambient = new THREE.HemisphereLight(0xbfd4ea, 0x4a4a44, 0.9);
+  scene.add(ambient);
+  var sun = new THREE.DirectionalLight(0xfff2d6, 1.05);
+  sun.position.set(-50, 100, 34);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 300;
+  sun.shadow.camera.left = -70; sun.shadow.camera.right = 70;
+  sun.shadow.camera.top = 70; sun.shadow.camera.bottom = -70;
+  scene.add(sun);
+
+  // 地面：整张城市平面图（道路 / 人行道 / 街区 / 标线）一张 2048² 画布画完
+  var groundTex = makeCityTexture();
+  groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  var ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(MAP.ground, MAP.ground),
+    new THREE.MeshLambertMaterial({ map: groundTex })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  /* ---------- 碰撞体与可命中表面 ---------- */
+  var colliders = [];      // { box:Box3, mesh:Mesh }
+  var solidMeshes = [];    // 参与子弹射线遮挡的实体
+
+  /* ---- 立面：4 种风格程序化贴图，按物理尺度平铺 ----
+     每张贴图画「一个开间 × 一层楼」（3.0m × 3.4m），再用 UV 缩放铺满整栋楼，
+     所以窗户在任何楼、任何面上都是真实大小（旧版一栋楼一张贴图会被拉伸）。 */
+  var FLOOR_H = 3.4, BAY_W = 3.0;
+  var FACADE_STYLES = ["glass", "resi", "brick", "office"];
+  var facadeMats = [];
+  FACADE_STYLES.forEach(function (st) {
+    for (var ti = 0; ti < 2; ti++) {                 // 每种 2 张，错开重复感
+      var t = new THREE.CanvasTexture(makeFacadeCanvas(st));
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      // 夜间发光图：只画亮着的窗户，其余纯黑 → 白天把 intensity 调 0 就等于关灯
+      var glow = new THREE.CanvasTexture(makeFacadeGlow(st, Math.random()));
+      glow.wrapS = glow.wrapT = THREE.RepeatWrapping;
+      var m = new THREE.MeshLambertMaterial({ map: t, emissive: 0xffffff, emissiveMap: glow });
+      m.emissiveIntensity = 0;
+      facadeMats.push(m);
+    }
+  });
+  function pickFacade() { return facadeMats[(Math.random() * facadeMats.length) | 0]; }
+
+  // 按面的实际尺寸缩放 UV：+x/-x 面横向是进深 d，+z/-z 面是面宽 w，
+  // 屋顶面两个方向都按开间算 —— 一份共享材质即可，不必每栋楼单独一份。
+  function uvBox(w, h, d) {
+    var g = boxGeo.clone();
+    var uv = g.attributes.uv;
+    var plan = [
+      [d / BAY_W, h / FLOOR_H],   // +x
+      [d / BAY_W, h / FLOOR_H],   // -x
+      [w / BAY_W, d / BAY_W],     // +y 屋顶
+      [w / BAY_W, d / BAY_W],     // -y
+      [w / BAY_W, h / FLOOR_H],   // +z
+      [w / BAY_W, h / FLOOR_H],   // -z
+    ];
+    for (var f = 0; f < 6; f++) for (var v = 0; v < 4; v++) {
+      var i = f * 4 + v;
+      uv.setXY(i, uv.getX(i) * plan[f][0], uv.getY(i) * plan[f][1]);
+    }
+    uv.needsUpdate = true;
+    return g;
+  }
+
+  /* 底层商铺：每栋楼底层外贴一层"店面"壳（比楼身宽 6cm，像挑出来的雨棚），
+     高度正好一层 → 严丝合缝盖住第一层的窗户。夜里招牌和橱窗会亮。 */
+  var SHOP_H = FLOOR_H;
+  var shopMats = [];
+  for (var si = 0; si < 3; si++) {
+    var st2 = new THREE.CanvasTexture(makeShopCanvas(si));
+    st2.wrapS = st2.wrapT = THREE.RepeatWrapping;
+    st2.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    var sg = new THREE.CanvasTexture(makeShopGlow(si));
+    sg.wrapS = sg.wrapT = THREE.RepeatWrapping;
+    var sm = new THREE.MeshLambertMaterial({ map: st2, emissive: 0xffffff, emissiveMap: sg });
+    sm.emissiveIntensity = 0;
+    shopMats.push(sm);
+  }
+
+  var boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  var roofMat = new THREE.MeshLambertMaterial({ color: 0x70757b });   // 女儿墙 / 屋顶杂物
+  var propMat = new THREE.MeshLambertMaterial({ color: 0x4c5157 });
+  var antGeo = new THREE.CylinderGeometry(0.06, 0.06, 1, 6);
+
+  function addSolid(mesh, w, h, d) {
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+    colliders.push({ box: new THREE.Box3().setFromObject(mesh), mesh: mesh });
+    solidMeshes.push(mesh);
+    return mesh;
+  }
+
+  // 建筑：按街区排布 —— 每个街区在人行道内缘圈出"地块"，随机放 1~4 栋；
+  // 外圈街区掺几栋地标高楼（28~46m）拉出天际线；中央 4 个街区留空作为交战广场
+  (function buildCity() {
+    var small = window.innerWidth < 768;         // 小屏砍掉四个角的外圈街区，控制 draw call
+    CITY_BLOCKS.forEach(function (bk) {
+      if (bk.central) return;
+      if (small && (bk.x0 <= -66 || bk.x0 >= 66) && (bk.z0 <= -66 || bk.z0 >= 66)) return;
+      var px0 = bk.x0 + SIDEWALK + 0.7, px1 = bk.x1 - SIDEWALK - 0.7;   // 地块范围
+      var pz0 = bk.z0 + SIDEWALK + 0.7, pz1 = bk.z1 - SIDEWALK - 0.7;
+      var pw = px1 - px0, pd = pz1 - pz0;
+      var outer = bk.x0 <= -66 || bk.x0 >= 66 || bk.z0 <= -66 || bk.z0 >= 66;
+      var cxm = (px0 + px1) / 2, czm = (pz0 + pz1) / 2;
+
+      function put(w, d, x, z) {
+        var h = 9 + Math.random() * 21;
+        if (outer && Math.random() < 0.3) h = 28 + Math.random() * 18;   // 外圈地标
+        var m = new THREE.Mesh(uvBox(w, h, d), pickFacade());
+        m.scale.set(w, h, d);
+        m.position.set(x, h / 2, z);
+        addSolid(m);
+
+        // 底层商铺（外凸 6cm，避免与楼身共面打架）
+        var shop = new THREE.Mesh(uvBox(w, SHOP_H, d), shopMats[(Math.random() * shopMats.length) | 0]);
+        shop.scale.set(w + 0.12, SHOP_H, d + 0.12);
+        shop.position.set(x, SHOP_H / 2, z);
+        shop.castShadow = true; shop.receiveShadow = true;
+        scene.add(shop);
+
+        // 女儿墙压顶：勾出天际线，顺便盖住屋顶面（屋顶上不该长窗户）
+        var cap = new THREE.Mesh(boxGeo, roofMat);
+        cap.scale.set(w + 0.6, 0.5, d + 0.6);
+        cap.position.set(x, h + 0.2, z);
+        cap.castShadow = true;
+        scene.add(cap);
+
+        // 屋顶杂物：水箱 / 空调机组（不做碰撞体 —— 玩家上不去）
+        if (Math.random() < 0.55) {
+          var pw2 = 1.2 + Math.random() * 1.6, pd2 = 1.0 + Math.random() * 1.4, ph = 0.7 + Math.random() * 0.9;
+          var prop = new THREE.Mesh(boxGeo, Math.random() < 0.5 ? roofMat : propMat);
+          prop.scale.set(pw2, ph, pd2);
+          prop.position.set(x + (Math.random() - 0.5) * Math.max(0.01, w - pw2 - 1.2),
+                            h + 0.45 + ph / 2,
+                            z + (Math.random() - 0.5) * Math.max(0.01, d - pd2 - 1.2));
+          scene.add(prop);
+        }
+        // 高楼上插根天线
+        if (h > 26 && Math.random() < 0.6) {
+          var al = 2.5 + Math.random() * 3.5;
+          var ant = new THREE.Mesh(antGeo, propMat);
+          ant.scale.set(1, al, 1);
+          ant.position.set(x + (Math.random() - 0.5) * Math.max(0.01, w - 1.5),
+                           h + 0.45 + al / 2,
+                           z + (Math.random() - 0.5) * Math.max(0.01, d - 1.5));
+          scene.add(ant);
+        }
+      }
+
+      // 整块一栋（基本贴满地块）；大地块沿长边切成两栋，中间留通道
+      if (pw <= 12 || Math.random() > 0.6) {
+        var w1 = pw - Math.random() * 2.2, d1 = pd - Math.random() * 2.2;
+        put(w1, d1, cxm + (Math.random() - 0.5) * (pw - w1), czm + (Math.random() - 0.5) * (pd - d1));
+      } else {
+        var gap = 1.4 + Math.random() * 1.2;
+        var wa = (pw - gap) * (0.4 + Math.random() * 0.2), wb = pw - gap - wa;
+        var d2 = pd - Math.random() * 2.2;
+        put(wa, d2, px0 + wa / 2, czm + (Math.random() - 0.5) * (pd - d2));
+        put(wb, d2, px1 - wb / 2, czm + (Math.random() - 0.5) * (pd - d2));
+      }
+    });
+  })();
+
+  /* ---------- 路灯：夜里给街道一点地面光源 ----------
+     只沿内侧三条道路（±30 / 0）布置，±60 那圈太远、细节看不清就不放了。
+     灯柱是实体但很细，不做碰撞体（撞上去也没人会注意）；灯头是 additive 光晕 sprite，
+     白天把 opacity 压到很低，夜里点亮。 */
+  var lampGlowMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture(),
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    transparent: true,
+    opacity: 0.1,
+  });
+  (function buildStreetLamps() {
+    var poleMat = new THREE.MeshLambertMaterial({ color: 0x3c4046 });
+    var LINES = [-30, 0, 30];
+    var OFF = 7.5;                       // 立在人行道里侧（路面半宽 6m + 1.5m）
+    function atJunction(v) {             // 交叉口附近让位，别杵在斑马线上
+      for (var i = 0; i < ROADS.length; i++) if (Math.abs(v - ROADS[i]) < ROAD_HW + 3) return true;
+      return false;
+    }
+    function put(x, z) {
+      var pole = new THREE.Mesh(boxGeo, poleMat);
+      pole.scale.set(0.16, 4.4, 0.16);
+      pole.position.set(x, 2.2, z);
+      pole.castShadow = true;
+      scene.add(pole);
+      var glow = new THREE.Sprite(lampGlowMat);
+      glow.scale.set(2.8, 2.8, 1);
+      glow.position.set(x, 4.6, z);
+      scene.add(glow);
+    }
+    LINES.forEach(function (cx) {                       // 纵向路：沿 z 摆，左右交替
+      [-45, -15, 15, 45].forEach(function (z, k) {
+        if (atJunction(z)) return;
+        put(cx + (k % 2 ? OFF : -OFF), z);
+      });
+    });
+    LINES.forEach(function (cz) {                       // 横向路：沿 x 摆
+      [-45, -15, 15, 45].forEach(function (x, k) {
+        if (atJunction(x)) return;
+        put(x, cz + (k % 2 ? OFF : -OFF));
+      });
+    });
+  })();
+
+  /* ---------- 载具：可驾驶 ----------
+     物理是 BeamNG 那种「软性」思路的简化版，但全部自己实现：
+     ① 车身每辆车一份独立几何，撞了会真的凹进去（按撞击点距离衰减，且是永久形变）
+     ② 纵向：油门 / 刹车 / 倒车 + 风阻与滚阻，速度越高推力越小（自然限速）
+     ③ 侧向：抓地力把侧滑速度往 0 拉；转向后速度向量不立刻跟着转 → 自然出现推头/甩尾；
+        空格手刹会让抓地骤降，可以拉出漂移
+     ④ 视觉：转向侧倾、加减速俯仰、撞击抖动、前轮转向与四轮滚动 */
+  var CAR_P = {
+    accel: 11,        // 油门加速度 m/s²
+    vMax: 30,         // 极速 m/s（≈108 km/h）
+    brake: 17,        // 刹车减速度
+    reverse: 7,       // 倒车极速
+    drag: 0.022,      // 风阻
+    roll: 0.7,        // 滚动阻力
+    grip: 7.5,        // 侧向抓地
+    gripHand: 1.7,    // 手刹时的抓地（越小越滑）
+    steerMax: 0.42,   // 最大转向角 rad（配合下面的速度衰减，43 km/h 时转弯半径约 15m）
+    wheelBase: 2.7,
+    // 碰撞半径已按车型拆到 CAR_TYPES[].rad，运行时用每辆车自己的 c.rad
+  };
+  var cars = [];
+  var driving = null;
+  var carLookYaw = 0, carLookPitch = 0;     // 驾驶时自由转视角的偏移（水平转哪停哪不回弹，俯仰缓慢回正）
+  var carGlowMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture(), blending: THREE.AdditiveBlending,
+    depthWrite: false, transparent: true, opacity: 0.1,
+  });
+  // 轮子：圆柱轴默认朝 Y，转 90° 变成横向，之后 rotation.x 就是滚动
+  var wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 10);
+  wheelGeo.rotateZ(Math.PI / 2);
+  var wheelMat = new THREE.MeshLambertMaterial({ color: 0x17191d });
+  var cabinMat = new THREE.MeshLambertMaterial({ color: 0x1b2430 });
+  var carBodyMats = [0xc0392b, 0x2f6f9f, 0xdcdfe3, 0x2c3e50, 0xd4a017, 0x4b7a4b].map(function (c) {
+    return new THREE.MeshLambertMaterial({ color: c });
+  });
+
+  /* 程序化车身库：4 种车身，尺寸/轮径/碰撞半径各不相同 —— 全部由代码生成，零外部资源。
+     bw/bh/bl/by = 车身宽·高·长与中心高度；cw/ch/cl/cy/cz = 驾驶舱；wr = 轮半径；
+     wx/wzf/wzr = 轮位（车头朝 -Z，所以前轮 z 为负）；lz = 车头灯 z；rad = 碰撞半径；
+     parts = 额外构件 [宽,高,长,x,y,z]（皮卡的货斗栏板与尾门）。 */
+  var CAR_TYPES = [
+    { name: "sedan", bw: 1.80, bh: 0.72, bl: 4.20, by: 0.72, cw: 1.62, ch: 0.60, cl: 2.00, cy: 1.34, cz: -0.15,
+      wr: 0.34, wx: 0.86, wzf: -1.38, wzr: 1.32, lz: -2.15, rad: 1.90 },
+    { name: "suv", bw: 1.95, bh: 0.95, bl: 4.50, by: 0.92, cw: 1.78, ch: 0.75, cl: 2.30, cy: 1.76, cz: -0.15,
+      wr: 0.40, wx: 0.92, wzf: -1.50, wzr: 1.45, lz: -2.30, rad: 2.05 },
+    { name: "pickup", bw: 1.85, bh: 0.62, bl: 4.60, by: 0.70, cw: 1.68, ch: 0.72, cl: 1.50, cy: 1.32, cz: -1.15,
+      wr: 0.36, wx: 0.86, wzf: -1.50, wzr: 1.50, lz: -2.35, rad: 2.00,
+      parts: [[0.14, 0.50, 2.70, -0.86, 1.16, 0.95], [0.14, 0.50, 2.70, 0.86, 1.16, 0.95],
+              [1.85, 0.50, 0.14, 0, 1.16, 2.32]] },
+    { name: "van", bw: 2.00, bh: 0.85, bl: 4.80, by: 0.80, cw: 1.92, ch: 1.00, cl: 3.60, cy: 1.72, cz: 0.15,
+      wr: 0.38, wx: 0.90, wzf: -1.60, wzr: 1.60, lz: -2.45, rad: 2.15 },
+  ];
+  var _ctOrder = CAR_TYPES.map(function (_, i) { return i; });
+  (function () {                                   // 洗牌，保证 8 辆车里 4 种车身分布均匀
+    for (var i = _ctOrder.length - 1; i > 0; i--) {
+      var j = (Math.random() * (i + 1)) | 0, t = _ctOrder[i];
+      _ctOrder[i] = _ctOrder[j]; _ctOrder[j] = t;
+    }
+  })();
+  var _ctCursor = 0;
+  function nextCarType() {
+    if (_ctCursor >= _ctOrder.length) _ctCursor = 0;
+    return CAR_TYPES[_ctOrder[_ctCursor++]];
+  }
+
+  function makeCar(x, z, yaw, ai, forceType) {
+    var t = forceType || nextCarType();
+    var g = new THREE.Group();
+    g.rotation.order = "YXZ";                        // 先摆朝向，再叠加俯仰/侧倾
+    var bodyGeo = boxGeo.clone();                    // 每车一份，撞击形变要改顶点
+    var body = new THREE.Mesh(bodyGeo, carBodyMats[(Math.random() * carBodyMats.length) | 0]);
+    body.scale.set(t.bw, t.bh, t.bl);
+    body.position.y = t.by;
+    g.add(body);
+    var cabin = new THREE.Mesh(boxGeo, cabinMat);
+    cabin.scale.set(t.cw, t.ch, t.cl);
+    cabin.position.set(0, t.cy, t.cz);
+    g.add(cabin);
+    if (t.parts) {                                   // 额外构件：皮卡的货斗栏板 + 尾门
+      for (var pi = 0; pi < t.parts.length; pi++) {
+        var p = t.parts[pi], pm = new THREE.Mesh(boxGeo, cabinMat);
+        pm.scale.set(p[0], p[1], p[2]);
+        pm.position.set(p[3], p[4], p[5]);
+        g.add(pm);
+      }
+    }
+    var wk = t.wr / 0.34;                            // wheelGeo 基准半径 0.34，缩放适配各车型
+    var wheels = [];
+    [[-t.wx, t.wzf], [t.wx, t.wzf], [-t.wx, t.wzr], [t.wx, t.wzr]].forEach(function (p) {
+      var w = new THREE.Mesh(wheelGeo, wheelMat);     // 前轮排 0/1 号，转向正好作用在它们上
+      w.scale.setScalar(wk);
+      w.position.set(p[0], t.wr, p[1]);
+      g.add(w); wheels.push(w);
+    });
+    [-t.bw * 0.33, t.bw * 0.33].forEach(function (lx) {   // 车头灯光晕（夜里才亮）
+      var s = new THREE.Sprite(carGlowMat);
+      s.scale.set(1.5, 1.5, 1);
+      s.position.set(lx, t.by, t.lz);
+      g.add(s);
+    });
+    g.position.set(x, 0, z);
+    g.rotation.y = yaw;
+    scene.add(g);
+
+    var c = {
+      g: g, body: body, wheels: wheels, t: t, rad: t.rad,
+      x: x, z: z, yaw: yaw, vx: 0, vz: 0,
+      steer: 0, spin: 0, roll: 0, pitch: 0, shake: 0, damage: 0,
+      ai: ai || null,
+      bodyOrig: bodyGeo.attributes.position.array.slice(0),   // 形变前的原始顶点
+    };
+    cars.push(c);
+    if (!ai) {
+      c.col = { box: new THREE.Box3(), mesh: body, car: c };   // 停着的车也能挡路
+      colliders.push(c.col);
+      syncCarCollider(c);
+    }
+    return c;
+  }
+
+  function syncCarCollider(c) {
+    if (!c.col) return;
+    var s = c.rad * 2;
+    c.col.box.setFromCenterAndSize(new THREE.Vector3(c.x, 0.75, c.z), new THREE.Vector3(s, 1.5, s));
+  }
+  function syncCar(c) {
+    c.g.position.set(c.x, c.shake > 0 ? Math.sin(c.shake * 45) * 0.06 : 0, c.z);
+    c.g.rotation.set(c.pitch, c.yaw, c.roll);
+    syncCarCollider(c);
+  }
+
+  /* 撞击形变：撞击点附近顶点沿撞击方向按距离平方衰减推进去，永久保留。
+     顶点存的是单位立方体（被 scale 拉成车身），所以先换算到局部米制再算距离。 */
+  function dentCar(c, ox, oz, nx, nz, depth) {
+    var t = c.t;
+    var pos = c.body.geometry.attributes.position, orig = c.bodyOrig;
+    var cosY = Math.cos(c.yaw), sinY = Math.sin(c.yaw);
+    var px = ox * cosY - oz * sinY, py = t.by, pz = ox * sinY + oz * cosY;   // 撞击点（局部米制）
+    var dx = nx * cosY - nz * sinY, dz = nx * sinY + nz * cosY;              // 形变方向
+    for (var i = 0; i < pos.count; i++) {
+      var vx = orig[i * 3] * t.bw, vy = orig[i * 3 + 1] * t.bh + t.by, vz = orig[i * 3 + 2] * t.bl;
+      var d = Math.sqrt((vx - px) * (vx - px) + (vy - py) * (vy - py) + (vz - pz) * (vz - pz));
+      if (d > 1.3) continue;
+      var f = 1 - d / 1.3; f = f * f * depth;
+      pos.setXYZ(i, (vx + dx * f) / t.bw, (vy - t.by) / t.bh, (vz + dz * f) / t.bl);
+    }
+    pos.needsUpdate = true;
+    c.body.geometry.computeVertexNormals();
+  }
+
+  function carCollide(c) {
+    var R = c.rad;
+    for (var i = 0; i < colliders.length; i++) {
+      var col = colliders[i];
+      if (col.car === c) continue;                    // 别撞自己
+      var b = col.box;
+      if (c.x <= b.min.x - R || c.x >= b.max.x + R || c.z <= b.min.z - R || c.z >= b.max.z + R) continue;
+      var dl = c.x - (b.min.x - R), dr = (b.max.x + R) - c.x;
+      var db = c.z - (b.min.z - R), df = (b.max.z + R) - c.z;
+      var m = Math.min(dl, dr, db, df), nx = 0, nz = 0;
+      if (m === dl) { c.x = b.min.x - R; nx = -1; }
+      else if (m === dr) { c.x = b.max.x + R; nx = 1; }
+      else if (m === db) { c.z = b.min.z - R; nz = -1; }
+      else { c.z = b.max.z + R; nz = 1; }
+      var vn = c.vx * nx + c.vz * nz;                 // 撞进墙里的速度分量
+      if (vn < 0) {
+        var impact = -vn;
+        if (impact > 3) {
+          dentCar(c, -nx * R, -nz * R, nx, nz, Math.min(0.26, impact * 0.028));
+          c.damage = Math.min(1, c.damage + impact * 0.018);
+          c.shake = 0.3;
+        }
+        c.vx -= vn * nx * 1.5;                        // 弹开一点
+        c.vz -= vn * nz * 1.5;
+      }
+    }
+  }
+
+  // 车撞人：按车速计算对敌人的伤害；人是软目标，几乎不伤车（减伤），只轻微掉速
+  function carHitEnemies(c) {
+    var sp = Math.hypot(c.vx, c.vz);
+    if (sp < 1.2) return;                           // 太慢不算撞人
+    var R = c.rad + 0.7;
+    for (var i = 0; i < targets.length; i++) {
+      var t = targets[i];
+      if (!t.userData.alive) continue;
+      var dx = t.position.x - c.x, dz = t.position.z - c.z;
+      if (dx * dx + dz * dz > R * R) continue;
+      damageEnemy(t, Math.min(150, sp * 11), false); // 越快越狠
+      var inv = sp > 0.01 ? 1 / sp : 0;             // 把敌人朝车前进方向推一点
+      t.position.x += c.vx * inv * 0.5; t.position.z += c.vz * inv * 0.5;
+      c.vx *= 0.9; c.vz *= 0.9;                     // 撞人只轻微掉速，软目标不伤车
+    }
+  }
+
+  /* 车损 100% → 爆炸：范围伤害 + 车辆销毁。
+     半径内敌人按距离衰减（爆心最狠、边缘较轻），冲击波把人往外推；
+     人在车里直接被炸死（GTA 式），不在车里则按距离吃伤害。 */
+  var CAR_BLAST_R = 8.5;                            // 爆炸半径 m
+  var carWarned = false;
+  function destroyCar(c) {
+    scene.remove(c.g);
+    if (c.col) {                                    // 别让毁掉的车还留在碰撞列表里
+      var i = colliders.indexOf(c.col);
+      if (i >= 0) colliders.splice(i, 1);
+      c.col = null;
+    }
+    var j = cars.indexOf(c);
+    if (j >= 0) cars.splice(j, 1);
+  }
+  function explodeCar(c) {
+    blastFx(new THREE.Vector3(c.x, 0.9, c.z));      // 复用火箭弹的火球 / 碎片 / 音效
+    var wasDriving = (driving === c);
+
+    for (var k = 0; k < targets.length; k++) {      // 范围伤害：敌人按距离衰减
+      var t = targets[k];
+      if (!t.userData.alive) continue;
+      var dx = t.position.x - c.x, dz = t.position.z - c.z;
+      var d = Math.sqrt(dx * dx + dz * dz);
+      if (d > CAR_BLAST_R) continue;
+      var f = 1 - d / CAR_BLAST_R;
+      damageEnemy(t, Math.round(55 + 95 * f), false);   // 边缘 55 → 爆心 150
+      var inv = d > 0.01 ? 1 / d : 0;                   // 冲击波往外推
+      t.position.x += dx * inv * 2.4 * f;
+      t.position.z += dz * inv * 2.4 * f;
+    }
+
+    if (wasDriving) {                               // 人在车里：先被甩出车外，再吃满伤害
+      exitCar();
+      hurtPlayer(100, "车辆爆炸");
+      toast("车辆爆炸！");
+    } else {
+      var dp = Math.hypot(player.x - c.x, player.z - c.z);
+      if (dp < CAR_BLAST_R) hurtPlayer(Math.round(18 + 62 * (1 - dp / CAR_BLAST_R)), "车辆爆炸");
+    }
+
+    destroyCar(c);
+  }
+
+  function updateDriving(dt) {
+    var c = driving;
+    var throttle, brake, hand, steerIn;
+    if (isStick()) {
+      throttle = JOY.my > 0.15;                    // 摇杆前推 = 油门，后拉 = 刹车 / 倒车
+      brake = JOY.my < -0.15;
+      hand = false;
+      steerIn = -JOY.mx;                           // 右推 = 右转（与 A / D 同向），且是模拟量
+    } else {
+      throttle = !!keys["KeyW"]; brake = !!keys["KeyS"]; hand = !!keys["Space"];
+      steerIn = (keys["KeyA"] ? 1 : 0) - (keys["KeyD"] ? 1 : 0);
+    }
+    c.steer += (steerIn - c.steer) * Math.min(1, dt * 7);
+
+    // 把速度分解到车身坐标系：vf 纵向、vl 侧向
+    var fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw);
+    var rx = Math.cos(c.yaw), rz = -Math.sin(c.yaw);
+    var vf = c.vx * fx + c.vz * fz;
+    var vl = c.vx * rx + c.vz * rz;
+
+    if (throttle) vf += CAR_P.accel * Math.max(0.15, 1 - Math.max(0, vf) / CAR_P.vMax) * dt;
+    if (brake) vf -= CAR_P.brake * dt;
+    vf -= vf * CAR_P.drag * Math.abs(vf) * dt;
+    vf -= Math.sign(vf) * Math.min(Math.abs(vf), CAR_P.roll * dt);
+    if (vf > CAR_P.vMax) vf = CAR_P.vMax;
+    if (vf < -CAR_P.reverse) vf = -CAR_P.reverse;
+
+    vl *= Math.exp(-(hand ? CAR_P.gripHand : CAR_P.grip) * dt);   // 抓地把侧滑吃掉
+    c.vx = fx * vf + rx * vl;
+    c.vz = fz * vf + rz * vl;
+
+    // 转向：速度越高方向盘越钝；注意转向改的是朝向，速度向量留在世界系 → 自然产生滑移
+    var sa = c.steer * CAR_P.steerMax / (1 + Math.abs(vf) / 9);
+    c.yaw += (vf / CAR_P.wheelBase) * Math.tan(sa) * dt;
+    c.x += c.vx * dt; c.z += c.vz * dt;
+
+    var H = 88;                                        // 别开出地图
+    c.x = Math.max(-H, Math.min(H, c.x));
+    c.z = Math.max(-H, Math.min(H, c.z));
+    carCollide(c);
+    carHitEnemies(c);
+    if (c.damage >= 1) { explodeCar(c); return; }   // 车损满 → 爆炸，车直接没了
+    if (c.damage >= 0.7 && !carWarned) { carWarned = true; toast("车损严重，即将爆炸！"); }
+
+    // 视觉：侧倾 / 俯仰 / 抖动 / 轮子
+    var sp = Math.abs(vf);
+    c.roll += (-sa * 0.2 * Math.min(1, sp / 10) - c.roll) * Math.min(1, dt * 6);
+    var pt = (brake ? 0.05 : 0) - (throttle ? 0.035 : 0);
+    c.pitch += (pt - c.pitch) * Math.min(1, dt * 5);
+    c.spin += vf * dt / c.t.wr;
+    if (c.shake > 0) c.shake -= dt;
+    for (var i = 0; i < c.wheels.length; i++) {
+      c.wheels[i].rotation.x = c.spin;
+      if (i < 2) c.wheels[i].rotation.y = sa;
+    }
+    syncCar(c);
+
+    // 追车镜头：固定在车后上方一点，随车朝向旋转；鼠标可自由转视角观察，松手缓慢回正
+    var d = 6.2, h = 3.2, k = Math.min(1, dt * 5);
+    var bx = c.x + Math.sin(c.yaw) * d;            // 车身正后方
+    var bz = c.z + Math.cos(c.yaw) * d;
+    camera.position.x += (bx - camera.position.x) * k;
+    camera.position.y += (h - camera.position.y) * k;
+    camera.position.z += (bz - camera.position.z) * k;
+    // 自由观察：车头朝向 + 鼠标偏移。水平方向保持不回弹（转哪停哪），只有俯仰缓慢回正
+    carLookPitch += (0 - carLookPitch) * Math.min(1, dt * 1.6);
+    camera.rotation.set(carLookPitch, c.yaw + carLookYaw, 0);   // 看向（车头 + 自由偏移）方向
+    var kmh = Math.hypot(c.vx, c.vz) * 3.6;
+    var fovT = BASE_FOV + Math.min(16, kmh * 0.17);
+    camera.fov += (fovT - camera.fov) * Math.min(1, dt * 3);
+    camera.updateProjectionMatrix();
+
+    $("carhud").textContent = (c.damage >= 0.7 ? "⚠ 快爆炸 · " : "") + Math.round(kmh) + " km/h"
+      + (c.damage > 0.05 ? " · 车损 " + Math.round(c.damage * 100) + "%" : "")
+      + " · 左键开枪 · F 下车 · H 鸣笛";
+  }
+
+  function updateTraffic(dt) {                         // 外圈环路上的背景车流
+    for (var i = 0; i < cars.length; i++) {
+      var c = cars[i];
+      if (!c.ai) continue;
+      c.x += c.vx * dt; c.z += c.vz * dt;
+      if (c.ai === "z" && c.z > 86) c.z = -86;
+      if (c.ai === "x" && c.x > 86) c.x = -86;
+      syncCar(c);
+    }
+  }
+
+  function nearestCar() {
+    var best = null, bd = 3.6;
+    for (var i = 0; i < cars.length; i++) {
+      var c = cars[i];
+      if (c.ai) continue;                              // 只上停着的车
+      var d = Math.hypot(c.x - player.x, c.z - player.z);
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  }
+  var carPrevWpn = "ar";                 // 上车前的枪，下车后换回来
+  function enterCar(c) {
+    driving = c;
+    carLookYaw = 0; carLookPitch = 0; carWarned = false;
+    c.vx = 0; c.vz = 0; c.steer = 0;
+    firing = false; holdAim = false; toggleAim = false; updateAim();
+    carPrevWpn = (cur === "pistol") ? "ar" : cur;
+    // switchWeapon 在换弹中会提前返回，这里先清掉换弹状态，否则会拿着步枪开车
+    reloading = false; reloadT = 0;
+    $("ammo").classList.remove("reloading");
+    $("reloadbar").classList.remove("on");
+    switchWeapon("pistol");              // 车上只能用单手武器：车载手枪
+    $("carhud").classList.add("on");
+    toast("W 油门 · S 刹车/倒车 · A/D 转向 · 空格手刹 · H 鸣笛 · 左键开枪 · F 下车");
+  }
+  function exitCar() {
+    var c = driving;
+    driving = null;
+    hornAudio.pause();
+    var rx = Math.cos(c.yaw), rz = -Math.sin(c.yaw);
+    var off = c.rad * 0.95;                          // 下车横向距离随车型宽度走
+    var px = c.x + rx * off, pz = c.z + rz * off;
+    if (!spotFree(px, pz)) { px = c.x - rx * off; pz = c.z - rz * off; }   // 靠墙就换另一边下
+    player.set(px, EYE_STAND, pz);
+    vel.set(0, 0, 0); onGround = true; crouching = false;
+    firing = false;
+    reloading = false; reloadT = 0;
+    switchWeapon(carPrevWpn || "ar");    // 下车换回上车前的枪
+    camera.fov = BASE_FOV; camera.updateProjectionMatrix();
+    $("carhud").classList.remove("on");
+  }
+  function toggleCar() { if (driving) exitCar(); else { var c = nearestCar(); if (c) enterCar(c); } }
+
+  (function buildCars() {
+    // 沿内侧道路贴边停车，避开交叉口与出生点；随机挑 6 个位置
+    var spots = [];
+    [-30, 0, 30].forEach(function (cx) {
+      [-45, -15, 15, 45].forEach(function (z) {
+        if (Math.abs(z) % 30 > 6 && Math.abs(z) % 30 < 24) spots.push({ x: cx + 4.4, z: z, yaw: 0 });
+      });
+    });
+    [-30, 0, 30].forEach(function (cz) {
+      [-45, -15, 15, 45].forEach(function (x) {
+        if (Math.abs(x) % 30 > 6 && Math.abs(x) % 30 < 24) spots.push({ x: x, z: cz + 4.4, yaw: Math.PI / 2 });
+      });
+    });
+    spots.sort(function () { return Math.random() - 0.5; });
+    var n = 0;
+    for (var i = 0; i < spots.length && n < 6; i++) {
+      var s = spots[i];
+      if (Math.hypot(s.x - 0, s.z - MAP.spawnZ) < 8) continue;   // 别堵在出生点
+      makeCar(s.x, s.z, s.yaw, null); n++;
+    }
+    // 外圈环路上跑两辆背景车（不参与碰撞，纯氛围）
+    var t1 = makeCar(-55.4, -70, Math.PI, "z"); t1.vz = 12;
+    var t2 = makeCar(-70, 55.4, -Math.PI / 2, "x"); t2.vx = 12;
+  })();
+
+  /* ---------- 昼夜切换 ---------- */
+  function applyDayNight(silent) {
+    var n = !!SET.night;
+    scene.background = n ? skyNight : skyDay;
+    scene.fog.color.setHex(n ? 0x141d31 : 0x9fb4c7);
+    scene.fog.near = n ? 34 : 45;
+    scene.fog.far = n ? 140 : 160;
+    ambient.color.setHex(n ? 0x33456e : 0xbfd4ea);
+    ambient.groundColor.setHex(n ? 0x15171c : 0x4a4a44);
+    ambient.intensity = n ? 0.62 : 0.9;
+    sun.color.setHex(n ? 0x9db4e6 : 0xfff2d6);          // 夜里当月亮用
+    sun.intensity = n ? 0.42 : 1.05;
+    sun.position.set(n ? 60 : -50, n ? 80 : 100, n ? -40 : 34);
+    for (var i = 0; i < facadeMats.length; i++) facadeMats[i].emissiveIntensity = n ? 1 : 0;
+    for (var si = 0; si < shopMats.length; si++) shopMats[si].emissiveIntensity = n ? 1 : 0;   // 招牌 / 橱窗
+    lampGlowMat.opacity = n ? 0.85 : 0.1;
+    carGlowMat.opacity = n ? 0.9 : 0.12;              // 车灯
+    // 夜里靶子也要看得清：给一点红色自发光，不然太暗没法打
+    targetMat.emissive.setHex(n ? 0x3a0f0f : 0x000000);
+    targetMatDark.emissive.setHex(n ? 0x260a0a : 0x000000);
+    if (!silent) toast(n ? "夜晚 · 窗户亮灯" : "白天");
+  }
+
+  /* ---------- 掩体：这才是真正能挡枪的东西 ---------- */
+  var COVER_KINDS = [
+    { n: "沙袋墙",  w: 3.4, h: 1.10, d: 0.75, c: 0x8a7a52 },
+    { n: "水泥墩",  w: 2.6, h: 1.35, d: 0.85, c: 0x8d8f93 },
+    { n: "矮砖墙",  w: 4.6, h: 1.60, d: 0.55, c: 0x9aa0a6 },
+    { n: "集装箱",  w: 5.6, h: 2.60, d: 2.40, c: 0x3f6f8f },
+    { n: "废车",    w: 2.0, h: 1.50, d: 4.40, c: 0x6b3b3b }
+  ];
+  var coverMats = {};
+  COVER_KINDS.forEach(function (k) { coverMats[k.n] = new THREE.MeshLambertMaterial({ color: k.c }); });
+
+  (function buildCover() {
+    var placed = [];
+    var tries = 0;
+    while (placed.length < 22 && tries++ < 400) {
+      var kind = COVER_KINDS[(Math.random() * COVER_KINDS.length) | 0];
+      var ang = Math.random() * Math.PI * 2;
+      var r = 8 + Math.random() * (MAP.coverR - 8);
+      var x = Math.cos(ang) * r, z = Math.sin(ang) * r;
+      // 出生点周围 6 米留白，避免一开局就被卡住
+      if (Math.sqrt(x * x + (z - MAP.spawnZ) * (z - MAP.spawnZ)) < 6) continue;
+      // 相互之间留 4 米通道，保证能绕行
+      var clash = false;
+      for (var i = 0; i < placed.length; i++) {
+        var p = placed[i];
+        if (Math.abs(p.x - x) < 4.5 && Math.abs(p.z - z) < 4.5) { clash = true; break; }
+      }
+      if (clash) continue;
+
+      var g = new THREE.Group();
+      var body = new THREE.Mesh(boxGeo, coverMats[kind.n]);
+      body.scale.set(kind.w, kind.h, kind.d);
+      body.position.y = kind.h / 2;
+      g.add(body);
+      if (kind.n === "废车") {                    // 给车加个车顶，视觉上更像车
+        var cab = new THREE.Mesh(boxGeo, coverMats["集装箱"]);
+        cab.scale.set(kind.w * 0.92, 0.62, kind.d * 0.5);
+        cab.position.set(0, kind.h + 0.3, -0.2);
+        g.add(cab);
+      }
+      g.position.set(x, 0, z);
+      g.rotation.y = Math.random() * Math.PI * 2;
+      scene.add(g);
+      g.traverse(function (o) { o.castShadow = true; o.receiveShadow = true; });
+      g.updateMatrixWorld(true);
+      colliders.push({ box: new THREE.Box3().setFromObject(g), mesh: body });
+      solidMeshes.push(body);
+      placed.push({ x: x, z: z });
+    }
+  })();
+
+  /* ---------- 敌人（会巡逻 / 交火） ---------- */
+  var ENEMY_HP = 70;          // 敌人血量
+  var ENEMY_DETECT = 30;      // 进入交战的距离
+  var ENEMY_KEEP = 13;        // 偏好交战距离（太近会后退）
+  var ENEMY_SPD = 3.2;        // 交战移动速度（含横向走位）
+  var ENEMY_BOUND = 34;       // 敌人活动半径
+  var ENEMY_FIRE_RANGE = 26;  // 开火距离上限
+  var ENEMY_FIRE_MIN = 1.3, ENEMY_FIRE_MAX = 2.2; // 射击间隔（秒）
+  var ENEMY_DMG = 7;          // 每次命中玩家的伤害
+  var ENEMY_ACC = 0.45;       // 近距命中率
+  var ENEMY_ACC_FALLOFF = 0.011; // 每米命中率衰减
+  var ENEMY_SPREAD = 0.06;    // 弹道散布基数
+
+  var targets = [];
+  var targetGeo = {
+    head: new THREE.SphereGeometry(0.42, 12, 10),
+    torso: new THREE.BoxGeometry(1.05, 1.35, 0.5),
+    pelvis: new THREE.BoxGeometry(0.95, 0.68, 0.5),
+    leg: new THREE.BoxGeometry(0.40, 1.08, 0.40),
+    arm: new THREE.BoxGeometry(0.30, 1.08, 0.30)
+  };
+  var targetMat = new THREE.MeshLambertMaterial({ color: 0xd23b3b });
+  var targetMatDark = new THREE.MeshLambertMaterial({ color: 0x7a1f1f });
+
+  function makeHumanoid(headM, torsoM, limbM) {
+    var g = new THREE.Group();
+    var head = new THREE.Mesh(targetGeo.head, headM); head.position.y = 3.05;
+    var torso = new THREE.Mesh(targetGeo.torso, torsoM); torso.position.y = 2.05;
+    var pelvis = new THREE.Mesh(targetGeo.pelvis, limbM); pelvis.position.y = 1.22;
+    var legL = new THREE.Mesh(targetGeo.leg, limbM); legL.position.set(-0.27, 0.54, 0);
+    var legR = new THREE.Mesh(targetGeo.leg, limbM); legR.position.set(0.27, 0.54, 0);
+    var armL = new THREE.Mesh(targetGeo.arm, torsoM); armL.position.set(-0.75, 2.05, 0);
+    var armR = new THREE.Mesh(targetGeo.arm, torsoM); armR.position.set(0.75, 2.05, 0);
+    g.add(head, torso, pelvis, legL, legR, armL, armR);
+    g.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
+    g.userData.hitParts = [head, torso];
+    g.userData.head = head; g.userData.torso = torso;
+    return g;
+  }
+
+  function makeTarget() {
+    // 每个敌人独立克隆材质，便于受击时单独做红闪（原靶子共用材质，无法逐个体高亮）
+    var headM = targetMat.clone(), torsoM = targetMat.clone(), limbM = targetMatDark.clone();
+    var g = makeHumanoid(headM, torsoM, limbM);
+    g.userData.alive = false; g.userData.deadT = 0;
+    g.userData.isTarget = true;
+    g.userData.hp = 0; g.userData.maxHp = ENEMY_HP;
+    g.userData.state = "patrol";
+    g.userData.dir = 0; g.userData.patrol = 0; g.userData.strafe = 1; g.userData.strafeCd = 0;
+    g.userData.fireCd = 0; g.userData.hitFlash = 0;
+    scene.add(g);
+    return g;
+  }
+
+  // 找一个不与掩体重叠、且离玩家不太近的落点
+  function spotFree(x, z) {
+    for (var i = 0; i < colliders.length; i++) {
+      var b = colliders[i].box;
+      if (x > b.min.x - 1.7 && x < b.max.x + 1.7 && z > b.min.z - 1.7 && z < b.max.z + 1.7) return false;
+    }
+    return true;
+  }
+
+  function spawnTarget(t) {
+    var x = 0, z = 0, tries = 0;
+    do {
+      var ang = Math.random() * Math.PI * 2;
+      var r = 10 + Math.random() * 22;          // 交战区半径 10~32
+      x = Math.cos(ang) * r; z = Math.sin(ang) * r;
+      tries++;
+    } while (tries < 50 &&
+             !(spotFree(x, z) && Math.sqrt((x - player.x) * (x - player.x) + (z - player.z) * (z - player.z)) > 11));
+
+    t.position.set(x, 0, z);
+    t.rotation.set(0, Math.random() * Math.PI * 2, 0);
+    t.scale.set(1, 1, 1);
+    t.visible = true;
+    t.userData.alive = true;
+    t.userData.deadT = 0;
+    t.userData.hp = ENEMY_HP; t.userData.maxHp = ENEMY_HP;
+    t.userData.state = "patrol";
+    t.userData.dir = Math.random() * Math.PI * 2;
+    t.userData.patrol = 2.0 + Math.random() * 1.4;          // 巡逻速度
+    t.userData.strafe = Math.random() < 0.5 ? -1 : 1;        // 交战时横向走位方向
+    t.userData.strafeCd = 0.5 + Math.random();
+    t.userData.fireCd = 1.5 + Math.random() * 2.5;           // 首次开火延迟
+    t.userData.hitFlash = 0;
+    // 复位上一轮的受击红闪
+    t.userData.head.material.emissive.setRGB(0, 0, 0);
+    t.userData.torso.material.emissive.setRGB(0, 0, 0);
+  }
+
+  function enemyFire(tg, dist) {
+    var mx = tg.position.x, mz = tg.position.z;
+    var muzzle = new THREE.Vector3(mx, 1.6, mz);                       // 敌人胸口/枪口高度
+    var py = player.y * 0.55 + 1.0;                                    // 瞄准玩家胸口高度
+    var dir = new THREE.Vector3(player.x - mx, py - 1.6, player.z - mz);
+    var spread = ENEMY_SPREAD * (0.6 + dist / ENEMY_FIRE_RANGE);       // 距离越远越飘
+    dir.x += (Math.random() - 0.5) * spread; dir.y += (Math.random() - 0.5) * spread; dir.z += (Math.random() - 0.5) * spread;
+    dir.normalize();
+    var hitChance = Math.max(0.1, Math.min(ENEMY_ACC, ENEMY_ACC - dist * ENEMY_ACC_FALLOFF));
+    var hit = Math.random() < hitChance;
+    var end = hit ? new THREE.Vector3(player.x, py, player.z)
+                  : muzzle.clone().add(dir.clone().multiplyScalar(dist));
+    if (!hit) { end.x += (Math.random() - 0.5) * 2.4; end.y += (Math.random() - 0.5) * 2.4; end.z += (Math.random() - 0.5) * 2.4; }
+    spawnTracer(muzzle, end);
+    sfxEnemyShot();
+    if (hit) hurtPlayer(ENEMY_DMG, "敌人");
+  }
+
+  function spawnBlood(pos) {
+    for (var i = 0; i < 12; i++) {
+      var s = new THREE.Mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: 0xbb1f2c }));
+      s.position.copy(pos); s.position.y += 1.0 + Math.random() * 1.4; scene.add(s);
+      sparks.push({ mesh: s, vel: new THREE.Vector3((Math.random() - 0.5) * 8, Math.random() * 7, (Math.random() - 0.5) * 8), life: 0.5 });
+    }
+  }
+
+  var MAX_TARGETS = { free: 16, challenge: 12 };
+  var RESPAWN = { free: 0.55, challenge: 0.28 };
+  var targetsPool = [];
+  for (var ti = 0; ti < MAX_TARGETS.free; ti++) targetsPool.push(makeTarget());
+  targets = targetsPool;
+
+  /* ==================================================================
+     3. 武器视图模型
+     ================================================================== */
+  var weaponHolder = new THREE.Group();
+  camera.add(weaponHolder);
+  scene.add(camera);
+
+  function mat(color, opts) { return new THREE.MeshLambertMaterial(Object.assign({ color: color }, opts || {})); }
+  var M = {
+    gunmetal: mat(0x2b2f36), dark: mat(0x15181d), wood: mat(0x6b4a2b),
+    woodDark: mat(0x4a3219), steel: mat(0x8a9099),
+    scopeGlass: mat(0x0a1a22, { transparent: true, opacity: 0.85 })
+  };
+  function box(w, h, d, m, x, y, z) {
+    var me = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    me.position.set(x || 0, y || 0, z || 0); return me;
+  }
+  function cyl(rt, rb, h, m, x, y, z, seg) {
+    var me = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 12), m);
+    me.position.set(x || 0, y || 0, z || 0); return me;
+  }
+
+  function buildAR() {
+    var g = new THREE.Group();
+    g.add(box(0.10, 0.13, 0.60, M.gunmetal, 0, 0, -0.35));
+    g.add(cyl(0.032, 0.032, 0.80, M.steel, 0, 0.015, -1.00).rotateX(Math.PI / 2));
+    g.add(box(0.06, 0.06, 0.10, M.dark, 0, 0.015, -1.43));
+    g.add(box(0.11, 0.10, 0.32, M.gunmetal, 0, -0.02, -0.72));
+    g.add(box(0.10, 0.14, 0.18, M.gunmetal, 0, -0.13, -0.30));
+    var mag = box(0.09, 0.30, 0.13, M.dark, 0, -0.30, -0.32); mag.rotation.x = 0.12; g.add(mag);
+    var grip = box(0.09, 0.20, 0.12, M.gunmetal, 0, -0.18, -0.10); grip.rotation.x = 0.35; g.add(grip);
+    g.add(box(0.09, 0.12, 0.40, M.dark, 0, -0.01, 0.05));
+    g.add(box(0.05, 0.06, 0.40, M.gunmetal, 0, 0.11, -0.45));
+    g.add(cyl(0.018, 0.018, 0.12, M.steel, 0, 0.15, -0.95).rotateX(Math.PI / 2));
+    g.add(box(0.03, 0.10, 0.03, M.dark, 0, 0.09, 0.22));
+    return g;
+  }
+  function buildSniper() {
+    var g = new THREE.Group();
+    g.add(box(0.09, 0.11, 0.70, M.gunmetal, 0, 0, -0.40));
+    g.add(cyl(0.030, 0.030, 1.00, M.steel, 0, 0.015, -1.15).rotateX(Math.PI / 2));
+    g.add(box(0.065, 0.065, 0.10, M.dark, 0, 0.015, -1.67));
+    var stock = box(0.10, 0.15, 0.50, M.wood, 0, -0.03, 0.10); stock.rotation.x = -0.03; g.add(stock);
+    g.add(box(0.07, 0.20, 0.10, M.woodDark, 0, -0.15, -0.12));
+    var mag = box(0.08, 0.18, 0.12, M.dark, 0, -0.20, -0.38); mag.rotation.x = 0.2; g.add(mag);
+    g.add(cyl(0.055, 0.055, 0.46, M.dark, 0, 0.13, -0.50).rotateX(Math.PI / 2));
+    g.add(cyl(0.065, 0.065, 0.07, M.steel, 0, 0.13, -0.73).rotateX(Math.PI / 2));
+    g.add(cyl(0.065, 0.065, 0.07, M.steel, 0, 0.13, -0.28).rotateX(Math.PI / 2));
+    g.add(box(0.028, 0.13, 0.028, M.dark, 0, 0.06, -0.50));
+    g.add(cyl(0.022, 0.022, 0.16, M.steel, 0.10, 0.03, -0.55).rotateZ(Math.PI / 2));
+    return g;
+  }
+
+  function buildRPG() {
+    var g = new THREE.Group();
+    var olive = mat(0x5c6b3a);
+    // 发射筒（前后贯通）
+    g.add(cyl(0.075, 0.075, 1.30, M.dark, 0, 0.02, -0.55).rotateX(Math.PI / 2));
+    // 筒口 / 筒尾护圈
+    g.add(cyl(0.098, 0.098, 0.09, M.gunmetal, 0, 0.02, -1.18).rotateX(Math.PI / 2));
+    g.add(cyl(0.088, 0.088, 0.07, M.gunmetal, 0, 0.02, 0.06).rotateX(Math.PI / 2));
+    // 火箭弹（露出筒口的弹头，发射后会隐藏）
+    var rocket = cyl(0.052, 0.052, 0.26, olive, 0, 0.02, -1.32).rotateX(Math.PI / 2);
+    rocket.name = "loaded"; g.add(rocket);
+    // 握把 + 扳机护圈
+    var grip = box(0.07, 0.21, 0.10, M.dark, 0, -0.17, -0.05); grip.rotation.x = 0.30; g.add(grip);
+    g.add(box(0.05, 0.09, 0.05, M.gunmetal, 0, -0.09, -0.22));
+    // 肩托 / 尾喷口
+    g.add(box(0.11, 0.11, 0.16, M.woodDark, 0, 0.02, 0.18));
+    // 简易瞄具
+    g.add(box(0.03, 0.05, 0.03, M.steel, 0, 0.11, -0.80));
+    g.add(box(0.02, 0.02, 0.34, M.steel, 0.07, 0.10, -0.35));
+    return g;
+  }
+
+  // 无托（犊牛式）布局：弹匣和枪机在握把后方，全枪短、提把自带瞄具
+  function buildAUG() {
+    var g = new THREE.Group();
+    g.add(box(0.10, 0.14, 0.62, M.gunmetal, 0, 0, -0.28));                       // 机匣
+    g.add(box(0.095, 0.11, 0.30, M.dark, 0, -0.01, -0.62));                      // 护木
+    g.add(cyl(0.032, 0.032, 0.42, M.steel, 0, 0.015, -0.80).rotateX(Math.PI / 2));  // 枪管
+    g.add(box(0.055, 0.055, 0.09, M.gunmetal, 0, 0.015, -1.03));                 // 消焰器
+    // 枪托：犊牛式的托底板直接接在机匣尾部
+    g.add(box(0.10, 0.16, 0.24, M.dark, 0, -0.01, 0.16));
+    g.add(box(0.105, 0.05, 0.06, M.gunmetal, 0, -0.02, 0.30));                   // 托底板
+    // 提把 + 内置瞄具
+    g.add(box(0.075, 0.055, 0.36, M.gunmetal, 0, 0.125, -0.30));
+    g.add(cyl(0.045, 0.045, 0.24, M.dark, 0, 0.15, -0.28).rotateX(Math.PI / 2));
+    g.add(cyl(0.045, 0.045, 0.02, M.scopeGlass, 0, 0.15, -0.40).rotateX(Math.PI / 2));
+    g.add(box(0.05, 0.03, 0.50, M.steel, 0, 0.09, -0.36));                       // 顶部导轨
+    // 握把在前、弹匣在后（犊牛式的标志）
+    var grip = box(0.08, 0.18, 0.11, M.gunmetal, 0, -0.16, -0.06); grip.rotation.x = 0.25; g.add(grip);
+    var mag = box(0.085, 0.28, 0.13, M.dark, 0, -0.28, 0.06); mag.rotation.x = 0.05; g.add(mag);
+    var fg = box(0.055, 0.15, 0.07, M.dark, 0, -0.15, -0.60); fg.rotation.x = -0.12; g.add(fg);  // 前握把
+    g.add(box(0.05, 0.09, 0.05, M.gunmetal, 0, -0.08, -0.26));                   // 扳机护圈
+    return g;
+  }
+
+  // 车载手枪：单手持握，尺寸比步枪小一圈，枪口同样朝 -Z
+  function buildPistol() {
+    var g = new THREE.Group();
+    g.add(box(0.055, 0.085, 0.30, M.gunmetal, 0, 0, -0.16));                  // 套筒
+    g.add(cyl(0.020, 0.020, 0.10, M.steel, 0, 0.010, -0.36).rotateX(Math.PI / 2));  // 枪管
+    g.add(box(0.030, 0.030, 0.035, M.dark, 0, 0.010, -0.42));                 // 枪口
+    var grip = box(0.050, 0.16, 0.085, M.dark, 0, -0.13, 0.02); grip.rotation.x = 0.30; g.add(grip);
+    g.add(box(0.042, 0.05, 0.07, M.gunmetal, 0, -0.19, 0.00));                // 弹匣底
+    g.add(box(0.040, 0.075, 0.045, M.gunmetal, 0, -0.07, -0.06));             // 扳机护圈
+    g.add(box(0.035, 0.045, 0.20, M.gunmetal, 0, -0.02, 0.02));               // 握把上部
+    g.add(box(0.020, 0.028, 0.026, M.steel, 0, 0.055, -0.26));                // 准星
+    g.add(box(0.030, 0.024, 0.030, M.steel, 0, 0.052, 0.00));                 // 照门
+    return g;
+  }
+
+  var arModel = buildAR();
+  var sniperModel = buildSniper();
+  var rpgModel = buildRPG();
+  var augModel = buildAUG();
+  var pistolModel = buildPistol();
+  arModel.visible = false; sniperModel.visible = false; rpgModel.visible = false;
+  augModel.visible = false; pistolModel.visible = false;
+  weaponHolder.add(arModel, sniperModel, rpgModel, augModel, pistolModel);
+  weaponHolder.traverse(function (o) { o.frustumCulled = false; });
+
+  var WPN = {
+    ar: { model: arModel, name: "突击步枪", sub: "5.56mm · 全自动", mag: 30, auto: true, rpm: 600, spread: 0.022, adsFov: 55, scope: false, kickZ: 0.10, kickY: 0.05, reload: 1.8, dmg: 26 },
+    sniper: { model: sniperModel, name: "狙击枪", sub: "栓动 · 精确射击", mag: 5, auto: false, rpm: 60, spread: 0.0, adsFov: 22, scope: true, kickZ: 0.22, kickY: 0.14, reload: 2.6, dmg: 85 },
+    aug: { model: augModel, name: "无托步枪", sub: "犊牛式 · 高射速", mag: 30, auto: true, rpm: 700, spread: 0.019, adsFov: 45, scope: true, kickZ: 0.11, kickY: 0.055, reload: 2.1, dmg: 24 },
+    rpg: { model: rpgModel, name: "火箭筒", sub: "单发 · 爆炸溅射", mag: 1, auto: false, rpm: 45, spread: 0.0, adsFov: 58, scope: false, kickZ: 0.36, kickY: 0.20, reload: 3.4, dmg: 0, rocket: true },
+    // 车载手枪：只在车上自动切换使用，不进入 1~4 的循环（WPN_ORDER 里没有它）
+    pistol: { model: pistolModel, name: "车载手枪", sub: "单手 · 半自动", mag: 12, auto: false, rpm: 420, spread: 0.03, adsFov: 62, scope: false, kickZ: 0.09, kickY: 0.045, reload: 1.3, dmg: 22 }
+  };
+  var WPN_ORDER = ["ar", "sniper", "aug", "rpg"];
+  var cur = "";
+  var ammo = WPN.ar.mag, reloading = false, reloadT = 0, reloadTotal = 0;
+
+  var HIP = { pos: new THREE.Vector3(0.24, -0.24, -0.52), rot: new THREE.Euler(0, -0.06, 0.04) };
+  var ADS = { pos: new THREE.Vector3(0.0, -0.145, -0.40), rot: new THREE.Euler(0, 0, 0) };
+  var weaponPos = HIP.pos.clone(), weaponRot = HIP.rot.clone();
+  var recoilKick = 0, bobT = 0;
+
+  function setWeaponPos() {
+    var target = aiming ? ADS : HIP;
+    weaponPos.lerp(target.pos, 0.18);
+    weaponRot.x += (target.rot.x - weaponRot.x) * 0.18;
+    weaponRot.y += (target.rot.y - weaponRot.y) * 0.18;
+    weaponRot.z += (target.rot.z - weaponRot.z) * 0.18;
+    var m = WPN[cur].model;
+    m.position.copy(weaponPos);
+    m.position.z += recoilKick;
+    m.rotation.copy(weaponRot);
+    m.rotation.x -= recoilKick * 0.6;
+    m.position.y += moving ? Math.sin(bobT) * 0.012 : 0;
+  }
+
+  /* ---------- 枪口火光 / 抛壳 / 曳光 / 火花 ---------- */
+  var muzzle = new THREE.PointLight(0xffd27f, 0, 8);
+  muzzle.position.set(0.24, -0.18, -1.45); camera.add(muzzle);
+  var flash = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4),
+    new THREE.MeshBasicMaterial({ color: 0xffd27f, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthTest: false }));
+  flash.position.set(0.24, -0.18, -1.5); camera.add(flash);
+
+  var shells = [], tracers = [], sparks = [];
+  var shellGeo = new THREE.BoxGeometry(0.03, 0.05, 0.01);
+  var shellMat = new THREE.MeshLambertMaterial({ color: 0xc9a23a });
+  var tracerGeo = new THREE.CylinderGeometry(0.012, 0.012, 1, 6);
+  var tracerMat = new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  var sparkGeo = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+  var sparkMat = new THREE.MeshBasicMaterial({ color: 0xffcaa0 });
+
+  function ejectShell() {
+    var s = new THREE.Mesh(shellGeo, shellMat);
+    s.position.copy(new THREE.Vector3(0.28, -0.22, -0.45).applyMatrix4(weaponHolder.matrixWorld));
+    scene.add(s);
+    shells.push({ mesh: s, vel: new THREE.Vector3((Math.random() - 0.5) * 2, 2 + Math.random() * 1.5, 1 + Math.random()),
+      ang: new THREE.Vector3(Math.random() * 8, Math.random() * 8, Math.random() * 8), life: 2.5 });
+  }
+  function spawnTracer(from, to) {
+    var dir = new THREE.Vector3().subVectors(to, from);
+    var len = dir.length();
+    if (len < 0.01) return;
+    var m = new THREE.Mesh(tracerGeo, tracerMat.clone());
+    m.scale.y = len;
+    m.position.copy(from).add(to).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    scene.add(m);
+    tracers.push({ mesh: m, life: 0.08 });
+  }
+  function spawnSparks(pos) {
+    for (var i = 0; i < 6; i++) {
+      var s = new THREE.Mesh(sparkGeo, sparkMat.clone());
+      s.position.copy(pos); scene.add(s);
+      sparks.push({ mesh: s, vel: new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6), life: 0.4 });
+    }
+  }
+
+  // 抛壳 / 曳光 / 火花：无论步行、驾驶还是倒地都持续更新，否则开车开枪时弹壳/曳光会卡在半空
+  function updateFx(dt) {
+    for (var s = shells.length - 1; s >= 0; s--) {
+      var sh = shells[s]; sh.life -= dt; sh.vel.y -= 9.8 * dt;
+      sh.mesh.position.addScaledVector(sh.vel, dt);
+      sh.mesh.rotation.x += sh.ang.x * dt; sh.mesh.rotation.y += sh.ang.y * dt; sh.mesh.rotation.z += sh.ang.z * dt;
+      if (sh.mesh.position.y < 0.02) { sh.mesh.position.y = 0.02; sh.vel.set(0, 0, 0); }
+      if (sh.life <= 0) { scene.remove(sh.mesh); shells.splice(s, 1); }
+    }
+    for (var tr = tracers.length - 1; tr >= 0; tr--) {
+      tracers[tr].life -= dt; tracers[tr].mesh.material.opacity = Math.max(0, tracers[tr].life / 0.08) * 0.9;
+      if (tracers[tr].life <= 0) { scene.remove(tracers[tr].mesh); tracers.splice(tr, 1); }
+    }
+    for (var sp = sparks.length - 1; sp >= 0; sp--) {
+      var sk = sparks[sp]; sk.life -= dt; sk.vel.y -= 12 * dt;
+      sk.mesh.position.addScaledVector(sk.vel, dt);
+      sk.mesh.material.opacity = Math.max(0, sk.life / 0.4); sk.mesh.material.transparent = true;
+      if (sk.life <= 0) { scene.remove(sk.mesh); sparks.splice(sp, 1); }
+    }
+  }
+
+  /* ==================================================================
+     4. 输入
+     ================================================================== */
+  var keys = {};
+  var yaw = 0, pitch = 0, aiming = false, firing = false, moving = false;
+
+  /* ---- GTA V 式移动：蹲下 / 站起 / 跳跃 / 跑步 ---- */
+  var crouching = false, sprinting = false, onGround = true, vy = 0;
+  var EYE_STAND = 1.7, EYE_CROUCH = 1.05;          // 眼高：站立 / 蹲下
+  var SPD_WALK = 5.2, SPD_SPRINT = 9.2, SPD_CROUCH = 2.4, SPD_AIM = 2.6;
+  var GRAVITY = 18, JUMP_V = 6.0;                   // 重力 / 起跳初速
+  function shiftDown() { return !!(keys["ShiftLeft"] || keys["ShiftRight"]); }
+  var pointerLocked = false, started = false;
+  var holdAim = false, toggleAim = false;     // 右键按住、C 键切换（Shift 已改为跑步）
+
+  var overlay = $("overlay"), hud = $("hud");
+  var fullscreenRequested = false;
+
+  /* Edge 的内置鼠标手势（121+ 默认开启）会把「按住右键瞄准」识别成
+     「向下滚动 / 前进 / 后退」，且这一层在浏览器 UI 里，网页 preventDefault
+     拦不住。所以 UA 命中的话直接把针对性提示摆到开始界面上。 */
+  if (/Edg\//.test(navigator.userAgent)) {
+    var edgeWarn = $("edgeWarn");
+    if (edgeWarn) edgeWarn.classList.add("on");
+  }
+
+  /* 指针锁定两个坑：
+     ① Chrome 的 requestPointerLock() 返回 undefined（没有 Promise），失败是**静默**的 ——
+        只靠 catch / pointerlockerror 检测不到，必须自己起看门狗确认是否真锁上了。
+     ② 在同一次点击里先 requestFullscreen 再 requestPointerLock，全屏切换过程会把锁定请求
+        取消（Chrome 尤其明显）→ 表现就是「点开始没反应，还得再点一下画面」。
+        所以：全屏归全屏，等它稳定之后再锁。 */
+  var lockTries = 0;
+  function lockFailed() {
+    if (pointerLocked) { lockTries = 0; return; }
+    if (lockTries >= 3) { lockTries = 0; toast("请再点一下画面继续游戏"); return; }
+    lockTries++;
+    setTimeout(function () {
+      if (pointerLocked) { lockTries = 0; return; }
+      try { renderer.domElement.requestPointerLock(); } catch (e) {}
+    }, 280 * lockTries);
+  }
+  function requestLock() {
+    if (pointerLocked) { lockTries = 0; return; }
+    try {
+      var p = renderer.domElement.requestPointerLock();
+      if (p && typeof p.catch === "function") p.catch(lockFailed);
+    } catch (e) { lockFailed(); return; }
+    setTimeout(function () { if (!pointerLocked) lockFailed(); }, 420);   // 看门狗
+  }
+  document.addEventListener("pointerlockerror", lockFailed);
+
+  // 等全屏稳定后再锁指针：fullscreenchange 一到就锁，事件没来也有 500ms 兜底
+  function lockWhenFullscreenReady() {
+    var done = false, timer;
+    var go = function () {
+      if (done) return; done = true;
+      document.removeEventListener("fullscreenchange", go);
+      document.removeEventListener("webkitfullscreenchange", go);
+      clearTimeout(timer);
+      requestLock();
+    };
+    timer = setTimeout(go, 500);
+    document.addEventListener("fullscreenchange", go);
+    document.addEventListener("webkitfullscreenchange", go);
+  }
+
+  /* 不能再用 started 做提前返回 —— 暂停后 started 仍为 true，
+     会让「点击继续」被直接拦掉、永远锁不上鼠标。 */
+  function startGame(e) {
+    if (e && inPanel(e.target)) return;        // 点设置/联机面板不算「开始」
+    if (pointerLocked) return;
+    if (isStick()) {                     // 摇杆模式：不锁指针（手指要点屏幕），直接开
+      if (!fullscreenRequested && window.self === window.top) { fullscreenRequested = true; toggleFullscreen(); }
+      startStick(); return;
+    }
+    if (!fullscreenRequested && window.self === window.top) {
+      fullscreenRequested = true;
+      var needFs = !(document.fullscreenElement || document.webkitFullscreenElement);
+      toggleFullscreen();
+      if (needFs) { lockWhenFullscreenReady(); return; }   // 等全屏稳定再锁，别和全屏抢
+    }
+    requestLock();
+  }
+  overlay.addEventListener("click", startGame);
+
+  document.addEventListener("pointerlockchange", function () {
+    pointerLocked = document.pointerLockElement === renderer.domElement;
+    if (pointerLocked) {
+      overlay.classList.add("hidden");
+      hud.classList.remove("hidden");
+      started = true;
+      setHudVisibility();
+      if (actx && actx.state === "suspended") actx.resume();
+      if (mode === "challenge" && !challenge.running && !challenge.done) startChallenge();
+    } else {
+      if (started) {
+        overlay.classList.remove("hidden");
+        overlay.querySelector("h1").textContent = "已暂停";
+        overlay.querySelector(".start").textContent = "点击继续";
+        firing = false; holdAim = false; updateAim();
+      }
+    }
+  });
+
+  /* ==================================================================
+     屏幕摇杆模式（触屏 / 鼠标通用）
+     摇杆模式**不锁指针**（手指要点屏幕），所以自己维护 started / 暂停状态。
+     与键盘模式共用 yaw/pitch、firing、driving 等状态，只是输入来源不同。
+     ================================================================== */
+  var joyEl = $("joy"), joyBase = $("joyBase"), joyKnob = $("joyKnob"), joyLook = $("joyLook");
+  var JOY = { mx: 0, my: 0, baseId: null, lookId: null, lx: 0, ly: 0 };
+  var JOY_R = 52;                                  // 摇杆最大偏移 px
+  var pausedStick = false;
+
+  function isStick() { return SET.ctrl === "stick"; }
+
+  function joyMoveFrom(e) {
+    var r = joyBase.getBoundingClientRect();
+    var dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    var d = Math.hypot(dx, dy);
+    if (d > JOY_R) { dx = dx / d * JOY_R; dy = dy / d * JOY_R; }
+    joyKnob.style.transform = "translate(" + dx.toFixed(1) + "px," + dy.toFixed(1) + "px)";
+    JOY.mx = dx / JOY_R;                           // 右为正
+    JOY.my = -dy / JOY_R;                          // 上为正（即前进）
+  }
+  function joyReset() { joyKnob.style.transform = "translate(0,0)"; JOY.mx = 0; JOY.my = 0; }
+
+  joyBase.addEventListener("pointerdown", function (e) {
+    if (!isStick()) return;
+    JOY.baseId = e.pointerId;
+    try { joyBase.setPointerCapture(e.pointerId); } catch (err) {}
+    joyMoveFrom(e); e.preventDefault();
+  });
+  joyBase.addEventListener("pointermove", function (e) {
+    if (JOY.baseId !== e.pointerId) return;
+    joyMoveFrom(e); e.preventDefault();
+  });
+  function joyBaseEnd(e) { if (JOY.baseId === e.pointerId) { JOY.baseId = null; joyReset(); } }
+  joyBase.addEventListener("pointerup", joyBaseEnd);
+  joyBase.addEventListener("pointercancel", joyBaseEnd);
+
+  // 右半屏拖动 = 转视角（在车上转的是车外视角，与鼠标行为一致）
+  joyLook.addEventListener("pointerdown", function (e) {
+    if (!isStick()) return;
+    JOY.lookId = e.pointerId; JOY.lx = e.clientX; JOY.ly = e.clientY;
+    try { joyLook.setPointerCapture(e.pointerId); } catch (err) {}
+    e.preventDefault();
+  });
+  joyLook.addEventListener("pointermove", function (e) {
+    if (JOY.lookId !== e.pointerId) return;
+    var dx = e.clientX - JOY.lx, dy = e.clientY - JOY.ly;
+    JOY.lx = e.clientX; JOY.ly = e.clientY;
+    var s = 0.0028 * SET.sens * (aiming ? SET.ads * (camera.fov / BASE_FOV) : 1);
+    if (driving) {
+      carLookYaw -= dx * s;
+      carLookPitch -= dy * s * (SET.yInv ? -1 : 1);
+      if (carLookYaw > Math.PI) carLookYaw -= Math.PI * 2;
+      else if (carLookYaw < -Math.PI) carLookYaw += Math.PI * 2;
+      carLookPitch = Math.max(-1.1, Math.min(1.1, carLookPitch));
+    } else {
+      yaw -= dx * s;
+      pitch -= dy * s * (SET.yInv ? -1 : 1);
+      pitch = Math.max(-1.45, Math.min(1.45, pitch));
+    }
+    e.preventDefault();
+  });
+  function joyLookEnd(e) { if (JOY.lookId === e.pointerId) JOY.lookId = null; }
+  joyLook.addEventListener("pointerup", joyLookEnd);
+  joyLook.addEventListener("pointercancel", joyLookEnd);
+
+  function joyBtn(id, down, up) {
+    var el = $(id);
+    el.addEventListener("pointerdown", function (e) {
+      e.preventDefault(); e.stopPropagation();
+      if (isStick()) down();
+    });
+    if (!up) return;
+    ["pointerup", "pointercancel", "pointerleave"].forEach(function (ev) {
+      el.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); up(); });
+    });
+  }
+  joyBtn("joyFire", function () { firing = true; }, function () { firing = false; });
+  joyBtn("joyJump", function () { if (!dead && onGround) { vy = JUMP_V; onGround = false; } });
+  joyBtn("joyReload", function () { reload(); });
+  joyBtn("joyAim", function () { toggleAim = !toggleAim; updateAim(); });
+  joyBtn("joyCar", function () { if (!dead) toggleCar(); });
+  joyBtn("joyPause", function () { if (started && !pausedStick) pauseStick(); });
+
+  function startStick() {
+    pausedStick = false;
+    overlay.classList.add("hidden");
+    hud.classList.remove("hidden");
+    joyEl.classList.remove("hidden");
+    started = true;
+    setHudVisibility();
+    if (actx && actx.state === "suspended") actx.resume();
+    if (mode === "challenge" && !challenge.running && !challenge.done) startChallenge();
+  }
+  function pauseStick() {
+    pausedStick = true;
+    joyReset(); firing = false; holdAim = false; toggleAim = false; updateAim();
+    joyEl.classList.add("hidden");
+    overlay.classList.remove("hidden");
+    overlay.querySelector("h1").textContent = "已暂停";
+    overlay.querySelector(".start").textContent = "点击继续";
+  }
+  function applyCtrlMode() {
+    if (started) return;                           // 设置面板只在开始前可见，这里仅同步提示文案
+    var el = overlay.querySelector(".start");
+    if (el) el.textContent = isStick() ? "点击开始（屏幕摇杆）" : "点击开始（锁定鼠标）";
+  }
+
+  // 灵敏度：基础系数 × 用户倍率 ×（开镜时按 FOV 缩放，这是瞄准镜的标准做法）
+  document.addEventListener("mousemove", function (e) {
+    if (!pointerLocked) return;
+    var s = 0.0023 * SET.sens;
+    if (driving) {
+      // 驾驶时转动的是车外视角（自由观察），不动车头；水平保持不回弹，可 360° 转
+      carLookYaw -= e.movementX * s;
+      carLookPitch -= e.movementY * s * (SET.yInv ? -1 : 1);
+      if (carLookYaw > Math.PI) carLookYaw -= Math.PI * 2;      // 绕回 ±180°，避免数值无限增长
+      else if (carLookYaw < -Math.PI) carLookYaw += Math.PI * 2;
+      carLookPitch = Math.max(-1.1, Math.min(1.1, carLookPitch));
+    } else {
+      var fovScale = camera.fov / BASE_FOV;
+      if (aiming) s *= SET.ads * fovScale;
+      yaw -= e.movementX * s;
+      pitch -= e.movementY * s * (SET.yInv ? -1 : 1);
+      pitch = Math.max(-1.45, Math.min(1.45, pitch));
+    }
+  });
+
+  function updateAim() { aiming = holdAim || toggleAim; }
+
+  document.addEventListener("mousedown", function (e) {
+    if (!pointerLocked) return;
+    if (e.button === 0) firing = true;
+    if (e.button === 2) {
+      // 右键被浏览器导航 / 手势占用时，这里大概率收不到 —— 所以另外提供
+      // C（切换）这条键盘备用路径，且开镜方式可设为「按一下切换」。
+      // 注意：Shift 现在是 GTA V 式的跑步键，不再兼任开镜。
+      if (SET.adsMode === "toggle") { toggleAim = !toggleAim; }
+      else holdAim = true;
+      updateAim();
+      e.preventDefault();
+    }
+  });
+  document.addEventListener("mouseup", function (e) {
+    if (e.button === 0) firing = false;
+    if (e.button === 2) { if (SET.adsMode !== "toggle") holdAim = false; updateAim(); }
+  });
+  document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+  /* 抑制触控板 / 触屏手势（刻意不拦 touchstart，否则触屏「点击开始」会失效）
+     同样只在指针锁定（游戏进行中）时拦截：未开始游戏时放行，
+     否则嵌在 iframe 里会把外层博客页的触摸滚动一起掐掉。 */
+  ["touchmove", "gesturestart", "gesturechange", "gestureend"].forEach(function (t) {
+    document.addEventListener(t, function (e) {
+      if (!pointerLocked) return;
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+  });
+  ["dragstart", "selectstart"].forEach(function (t) {
+    document.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  });
+
+  function toggleFullscreen() {
+    var d = document;
+    if (d.fullscreenElement || d.webkitFullscreenElement) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); }
+    else {
+      var el = d.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+      try { var p = req.call(el); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+    }
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON")) return;
+    keys[e.code] = true;
+    if (e.code === "KeyR") reload();
+    if (e.code === "KeyF") { if (!dead && pointerLocked) toggleCar(); }   // 上 / 下车
+    if (e.code === "KeyV") toggleFullscreen();                            // 全屏（F 已让给载具）
+    if (e.code === "KeyH") { if (driving && hornAudio.paused) { hornAudio.currentTime = 0; hornAudio.play().catch(function () {}); } }   // 驾驶时按 H 鸣笛
+    // 车上只允许车载手枪，1~4 切枪在车里无效（下车自动换回上前的枪）
+    if (e.code === "Digit1" && !driving) switchWeapon("ar");
+    if (e.code === "Digit2" && !driving) switchWeapon("sniper");
+    if (e.code === "Digit3" && !driving) switchWeapon("rpg");
+    if (e.code === "Digit4" && !driving) switchWeapon("aug");
+    if (e.code === "KeyC") { toggleAim = !toggleAim; updateAim(); toast(toggleAim ? "开镜（切换）" : "收镜"); }
+    /* GTA V 键位：Space 跳跃、Ctrl 蹲下/站起切换（Shift 已让位给跑步） */
+    if (e.code === "Space") {
+      e.preventDefault();
+      if (!dead && onGround && pointerLocked) { vy = JUMP_V; onGround = false; }
+    }
+    if (e.code === "ControlLeft" || e.code === "ControlRight") {
+      e.preventDefault();
+      if (!dead && pointerLocked) { crouching = !crouching; toast(crouching ? "蹲下" : "站起"); }
+    }
+    if (e.code === "Tab") { e.preventDefault(); toast(Net.statusLine()); }
+    if (e.code === "Escape") {
+      if (pointerLocked) document.exitPointerLock();
+      else if (started && isStick() && !pausedStick) pauseStick();   // 摇杆模式没有指针锁可退
+    }
+  });
+  document.addEventListener("keyup", function (e) {
+    keys[e.code] = false;
+    if (e.code === "KeyH") hornAudio.pause();   // 松开 H 停喇叭
+  });
+  window.addEventListener("wheel", function (e) {
+    // 必须先判断指针锁定再决定是否 preventDefault：
+    // 本页嵌在博客 /shooter/ 页的 iframe 里，未开始游戏时若无条件吞掉滚轮事件，
+    // 滚动量无法「链式」传递到外层页面，用户会把博客页卡住滚不动。
+    if (!pointerLocked) return;
+    if (e.cancelable) e.preventDefault();
+    if (driving) return;                 // 车上锁死车载手枪，滚轮不切枪
+    switchWeapon(WPN_ORDER[(WPN_ORDER.indexOf(cur) + 1) % WPN_ORDER.length]);
+  }, { passive: false });
+
+  // 筒口那发待击的火箭弹：打出去后筒口空着，装填完再出现
+  function setRocketLoaded(v) {
+    var m = rpgModel.getObjectByName("loaded");
+    if (m) m.visible = !!v;
+  }
+
+  function switchWeapon(w) {
+    if (w === cur || reloading) return;
+    cur = w; ammo = WPN[cur].mag; reloading = false; reloadT = 0;
+    for (var wk in WPN) WPN[wk].model.visible = (wk === cur);   // 三把枪统一切换
+    setRocketLoaded(true);
+    firing = false; holdAim = false; updateAim();
+    updateHud(); toast(WPN[cur].name);
+    // 首次 switchWeapon 早于 Net 初始化，这里必须判空
+    if (typeof Net !== "undefined" && Net && Net.sendState) Net.sendState(true);
+  }
+  switchWeapon("ar");
+
+  function reload() {
+    if (reloading || ammo === WPN[cur].mag || dead) return;
+    reloading = true; reloadT = WPN[cur].reload; reloadTotal = WPN[cur].reload;
+    $("ammo").classList.add("reloading");
+    $("reloadbar").classList.add("on");
+    sfxReload();
+  }
+
+  /* ==================================================================
+     5. 射击
+     ================================================================== */
+  var lastShot = 0;
+  var raycaster = new THREE.Raycaster();
+
+  function collectHittables() {
+    var list = solidMeshes.slice();
+    for (var i = 0; i < targets.length; i++) {
+      var t = targets[i];
+      if (t.userData.alive) { list.push(t.userData.head); list.push(t.userData.torso); }
+    }
+    for (var pid in Net.remote) {
+      var rp = Net.remote[pid];
+      if (rp.alive && rp.group) { list.push(rp.group.userData.head); list.push(rp.group.userData.torso); }
+    }
+    return list;
+  }
+
+  function tryShoot(now) {
+    var spec = WPN[cur];
+    if (now - lastShot < 60 / spec.rpm) return;
+    if (reloading || dead) return;
+    if (ammo <= 0) { sfxDry(); reload(); return; }
+    lastShot = now; ammo--; updateHud();
+    shotsFired++;
+
+    recoilKick = spec.kickZ;
+    muzzle.intensity = 3.2;
+    flash.material.opacity = 1; flash.rotation.z = Math.random() * Math.PI;
+    flash.scale.setScalar(0.7 + Math.random() * 0.6);
+    if (spec.rocket) sfxRocket(); else { ejectShell(); sfxShot(spec.scope); }
+
+    var dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    if (spec.spread > 0 && !aiming) {
+      dir.x += (Math.random() - 0.5) * spec.spread;
+      dir.y += (Math.random() - 0.5) * spec.spread;
+      dir.normalize();
+    }
+    var muzzleWorld = new THREE.Vector3(0.24, -0.18, -1.4).applyMatrix4(camera.matrixWorld);
+
+    // RPG：发射真实飞行火箭弹，不走 hitscan
+    if (spec.rocket) {
+      fireRocket(muzzleWorld, dir.clone());
+      setRocketLoaded(false);
+      if (ammo <= 0) reload();
+      return;
+    }
+
+    raycaster.set(muzzleWorld, dir);
+    raycaster.far = 300;
+    var hits = raycaster.intersectObjects(collectHittables(), false);
+    var endPoint;
+
+    if (hits.length) {
+      var h = hits[0], obj = h.object, grp = obj.parent;
+      endPoint = h.point.clone();
+      // 靶子
+      if (grp && grp.userData && grp.userData.isTarget && grp.userData.alive) {
+        var isHead = (obj === grp.userData.head);
+        damageEnemy(grp, isHead ? spec.dmg * 2.2 : spec.dmg, isHead);
+        spawnSparks(h.point); onHit(isHead);
+        Net.sendShot(muzzleWorld, dir, isHead);
+      }
+      // 联机玩家
+      else if (grp && grp.userData && grp.userData.pid) {
+        var isHead2 = (obj === grp.userData.head);
+        Net.sendShot(muzzleWorld, dir, isHead2, grp.userData.pid, h.point);
+        spawnSparks(h.point); onHit(isHead2);
+      }
+      // 掩体 / 建筑：只出火花，不算命中
+      else { spawnSparks(h.point); }
+    } else {
+      var gHits = raycaster.intersectObject(ground, false);
+      if (gHits.length) { endPoint = gHits[0].point.clone(); spawnSparks(gHits[0].point); }
+      else endPoint = muzzleWorld.clone().add(dir.clone().multiplyScalar(120));
+      Net.sendShot(muzzleWorld, dir, false);
+    }
+    spawnTracer(muzzleWorld, endPoint);
+
+    // 打空最后一发 → 立即自动换弹（不必再点一次，也不响空仓声）
+    if (ammo <= 0) reload();
+  }
+
+  function damageEnemy(group, dmg, head) {
+    if (!group || !group.userData || !group.userData.alive) return;
+    group.userData.hp -= dmg;
+    group.userData.hitFlash = 0.14;            // 受击红闪
+    if (group.userData.hp <= 0) {
+      group.userData.alive = false;
+      group.userData.deadT = 0;
+      score += head ? 100 : 50;
+      if (head) headshots++;
+      if (mode === "challenge" && challenge.running) { challenge.hits++; if (head) challenge.hs++; }
+      spawnBlood(group.position);              // 死亡血雾
+      sfxEnemyDie();
+      updateHud();
+    }
+  }
+
+  function onHit(head) {
+    shotsHit++; updateAcc();
+    var hm = $("hitmarker");
+    hm.classList.remove("show"); void hm.offsetWidth; hm.classList.add("show");
+    $("crosshair").classList.add("hit");
+    setTimeout(function () { $("crosshair").classList.remove("hit"); }, 120);
+  }
+
+  /* ==================================================================
+     6. 统计 / HUD / 挑战模式
+     ================================================================== */
+  var score = 0, headshots = 0, shotsFired = 0, shotsHit = 0;
+  var mode = "free";
+  var challenge = { running: false, done: false, t: 0, hits: 0, hs: 0, fired0: 0, hit0: 0 };
+  var CHALLENGE_TIME = 60;
+
+  function updateHud() {
+    $("wpn").innerHTML = WPN[cur].name + "<small>" + WPN[cur].sub + "</small>";
+    var a = $("ammo");
+    a.innerHTML = '<span class="now">' + ammo + '</span><span class="mag"> / ' + WPN[cur].mag + '</span>';
+    $("score").textContent = score;
+    $("hs").textContent = headshots;
+  }
+  function updateAcc() {
+    var acc = shotsFired ? Math.round(shotsHit / shotsFired * 100) : 0;
+    $("acc").textContent = acc + "%";
+  }
+  function setHudVisibility() {
+    // 单人开局也要显示血量条（敌人会还击），联机照旧
+    $("hpbar").style.display = (started || Net.connected) ? "block" : "none";
+    $("timer").classList.toggle("hidden", !(mode === "challenge" && (challenge.running || challenge.done)));
+  }
+
+  function startChallenge() {
+    challenge.running = true; challenge.done = false; challenge.t = CHALLENGE_TIME;
+    challenge.hits = 0; challenge.hs = 0; challenge.fired0 = shotsFired; challenge.hit0 = shotsHit;
+    score = 0; headshots = 0;
+    // 挑战模式靶子少一点、刷新更快，逼迫连续甩枪
+    setTargetCount(MAX_TARGETS.challenge);
+    updateHud(); updateAcc();
+    $("timer").classList.remove("hidden");
+    toast("开始！60 秒");
+  }
+  function endChallenge() {
+    challenge.running = false; challenge.done = true;
+    var fired = shotsFired - challenge.fired0;
+    var acc = fired ? Math.round(challenge.hits / fired * 100) : 0;
+    var rate = challenge.hits / CHALLENGE_TIME;
+    $("rHits").textContent = challenge.hits;
+    $("rHs").textContent = challenge.hs;
+    $("rAcc").textContent = acc + "%";
+    $("rRate").textContent = rate.toFixed(1);
+    if (challenge.hits > (BEST.hits || 0)) { BEST.hits = challenge.hits; BEST.hs = challenge.hs; BEST.acc = acc; }
+    if (rate > (BEST.rate || 0)) BEST.rate = rate;
+    try { localStorage.setItem(BEST_KEY, JSON.stringify(BEST)); } catch (e) {}
+    $("rBestHits").textContent = BEST.hits || 0;
+    $("rBestRate").textContent = (BEST.rate || 0).toFixed(1);
+    // 0 命中不入库，避免刷空榜
+    var rank = challenge.hits > 0
+      ? boardSubmit({ hits: challenge.hits, hs: challenge.hs, acc: acc, rate: Math.round(rate * 10) / 10 })
+      : 0;
+    var rk = $("rrank");
+    if (rk) {
+      rk.textContent = rank ? ("第 " + rank + " 名")
+        : (challenge.hits > 0 ? "未超过你的历史最好成绩" : "本次无命中，未计入榜单");
+    }
+    $("timer").classList.add("hidden");
+    $("result").classList.remove("hidden");
+    if (pointerLocked) document.exitPointerLock();
+  }
+  function resetChallenge() {
+    $("result").classList.add("hidden");
+    challenge.done = false;
+    setTargetCount(MAX_TARGETS.challenge);
+    for (var i = 0; i < targets.length; i++) spawnTarget(targets[i]);
+    if (pointerLocked) startChallenge();
+    else { overlay.querySelector("h1").textContent = "准备开始"; overlay.querySelector(".start").textContent = "点击开始"; }
+  }
+
+  function setTargetCount(n) {
+    while (targetsPool.length < n) targetsPool.push(makeTarget());
+    for (var i = 0; i < targetsPool.length; i++) {
+      var t = targetsPool[i];
+      if (i < n) { if (!t.userData.alive) spawnTarget(t); t.visible = true; }
+      else { t.visible = false; t.userData.alive = false; }
+    }
+    targets = targetsPool.slice(0, n);
+  }
+
+  function toast(msg) {
+    var el = $("toast"); if (!el) return;
+    el.textContent = msg; el.classList.add("show");
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(function () { el.classList.remove("show"); }, 1100);
+  }
+
+  /* ---------- 面板：模式 / 设置 / 联机 ---------- */
+  (function bindPanels() {
+    $("modes").addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest("button[data-mode]") : null;
+      if (!b) return;
+      e.stopPropagation();
+      mode = b.getAttribute("data-mode");
+      Array.prototype.forEach.call(this.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+      if (mode === "free") { setTargetCount(MAX_TARGETS.free); $("timer").classList.add("hidden"); challenge.running = false; }
+      else { setTargetCount(MAX_TARGETS.challenge); }
+    });
+
+    function bindRange(id, vid, key, fmt, after) {
+      var el = $(id), v = $(vid);
+      el.addEventListener("input", function () {
+        SET[key] = parseInt(el.value, 10) / 100;
+        v.textContent = fmt(SET[key]);
+        saveSet();
+        if (after) after();
+      });
+      el.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+      el.addEventListener("click", function (e) { e.stopPropagation(); });
+    }
+    bindRange("sSens", "sSensV", "sens", function (x) { return x.toFixed(2); });
+    bindRange("sAds", "sAdsV", "ads", function (x) { return x.toFixed(2); });
+
+    function bindSeg(id, key, cast, after) {
+      $(id).addEventListener("click", function (e) {
+        var b = e.target.closest ? e.target.closest("button[data-v]") : null;
+        if (!b) return;
+        e.stopPropagation();
+        SET[key] = cast ? cast(b.getAttribute("data-v")) : b.getAttribute("data-v");
+        Array.prototype.forEach.call(this.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+        saveSet();
+        if (after) after();
+      });
+    }
+    bindSeg("segAds", "adsMode");
+    bindSeg("segInv", "yInv", function (v) { return v === "1"; });
+    bindSeg("segNight", "night", function (v) { return v === "1"; }, function () { applyDayNight(); });
+    bindSeg("segCtrl", "ctrl", null, applyCtrlMode);
+
+    // 面板区域整体阻止冒泡，避免点滑条时触发「开始游戏」
+    ["modesBox", "setbox", "mpbox"].forEach(function (id) {
+      $(id).addEventListener("click", function (e) { e.stopPropagation(); });
+      $(id).addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+    });
+
+    $("rAgain").addEventListener("click", function () { resetChallenge(); });
+    $("rBack").addEventListener("click", function () {
+      $("result").classList.add("hidden");
+      mode = "free"; setTargetCount(MAX_TARGETS.free);
+      Array.prototype.forEach.call($("modes").querySelectorAll("button"), function (x) {
+        x.classList.toggle("on", x.getAttribute("data-mode") === "free");
+      });
+      overlay.querySelector(".start").textContent = "点击继续";
+    });
+
+    // 回填已保存设置
+    $("sSens").value = Math.round(SET.sens * 100); $("sSensV").textContent = SET.sens.toFixed(2);
+    $("sAds").value = Math.round(SET.ads * 100); $("sAdsV").textContent = SET.ads.toFixed(2);
+    Array.prototype.forEach.call($("segAds").querySelectorAll("button"), function (b) {
+      b.classList.toggle("on", b.getAttribute("data-v") === SET.adsMode);
+    });
+    Array.prototype.forEach.call($("segInv").querySelectorAll("button"), function (b) {
+      b.classList.toggle("on", (b.getAttribute("data-v") === "1") === SET.yInv);
+    });
+    Array.prototype.forEach.call($("segNight").querySelectorAll("button"), function (b) {
+      b.classList.toggle("on", (b.getAttribute("data-v") === "1") === !!SET.night);
+    });
+    Array.prototype.forEach.call($("segCtrl").querySelectorAll("button"), function (b) {
+      b.classList.toggle("on", b.getAttribute("data-v") === SET.ctrl);
+    });
+    applyCtrlMode();                     // 同步「开始」按钮文案
+    applyDayNight(true);                 // 按上次保存的时段初始化，不弹提示
+    $("nick").value = SET.nick || "";
+    $("nick").addEventListener("change", function () { SET.nick = this.value; saveSet(); });
+    $("room").value = SET.room || "";
+  })();
+
+  /* ==================================================================
+     6.5 火箭弹 / 爆炸
+     ================================================================== */
+  var rockets = [], blasts = [];
+  var ROCKET_SPEED = 78, ROCKET_GRAV = 2.2, ROCKET_LIFE = 5;
+  var rocketGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.52, 8);
+  var rocketMat = mat(0x5c6b3a);
+  var blastGeo = new THREE.SphereGeometry(1, 16, 12);
+
+  function fireRocket(from, dir) {
+    var m = new THREE.Mesh(rocketGeo, rocketMat);
+    m.position.copy(from);
+    m.add(new THREE.PointLight(0xffa64d, 1.4, 14));   // 尾焰
+    scene.add(m);
+    rockets.push({ mesh: m, vel: dir.clone().normalize().multiplyScalar(ROCKET_SPEED), life: ROCKET_LIFE, armed: 0.05 });
+  }
+
+  function solidHitTest(p) {
+    for (var i = 0; i < colliders.length; i++) {
+      var b = colliders[i].box;
+      if (p.x > b.min.x && p.x < b.max.x && p.y > b.min.y && p.y < b.max.y && p.z > b.min.z && p.z < b.max.z) return true;
+    }
+    return false;
+  }
+  function nearTarget(p, rad) {
+    for (var i = 0; i < targets.length; i++) {
+      var t = targets[i];
+      if (!t.userData.alive) continue;
+      var dx = t.position.x - p.x, dz = t.position.z - p.z, dy = 1.6 - p.y;
+      if (dx * dx + dz * dz < rad * rad && Math.abs(dy) < 2.6) return true;
+    }
+    return false;
+  }
+  function updateRockets(dt) {
+    for (var i = rockets.length - 1; i >= 0; i--) {
+      var r = rockets[i];
+      r.life -= dt; r.armed -= dt;
+      r.vel.y -= ROCKET_GRAV * dt;
+      r.mesh.position.addScaledVector(r.vel, dt);
+      r.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), r.vel.clone().normalize());
+
+      var hit = false;
+      if (r.armed <= 0 && (nearTarget(r.mesh.position, 1.3) || solidHitTest(r.mesh.position))) hit = true;
+      if (!hit && r.mesh.position.y <= 0.15) hit = true;
+      if (!hit && r.life <= 0) hit = true;
+
+      if (hit) { explode(r.mesh.position.clone()); scene.remove(r.mesh); rockets.splice(i, 1); }
+    }
+  }
+
+  /* 爆炸的纯视觉部分（火球 + 碎片），explode() 调用它 */
+  function blastFx(pos) {
+    sfxExplosion();
+    var light = new THREE.PointLight(0xffb066, 7, 46);
+    light.position.copy(pos); scene.add(light);
+    var sphere = new THREE.Mesh(blastGeo, new THREE.MeshBasicMaterial({
+      color: 0xffc27a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false
+    }));
+    sphere.position.copy(pos); scene.add(sphere);
+    blasts.push({ mesh: sphere, light: light, life: 0.45, max: 0.45 });
+
+    for (var i = 0; i < 24; i++) {                    // 碎片
+      var s = new THREE.Mesh(sparkGeo, sparkMat.clone());
+      s.position.copy(pos); scene.add(s);
+      sparks.push({ mesh: s, vel: new THREE.Vector3((Math.random() - 0.5) * 22, Math.random() * 16, (Math.random() - 0.5) * 22),
+        life: 0.55 + Math.random() * 0.3 });
+    }
+  }
+
+  function explode(pos) {
+    blastFx(pos);
+
+    for (var k = 0; k < targets.length; k++) {        // 溅射：靶子
+      var t = targets[k];
+      if (!t.userData.alive) continue;
+      var dx = t.position.x - pos.x, dz = t.position.z - pos.z, dy = 1.5 - pos.y;
+      if (dx * dx + dz * dz + dy * dy < 49) damageEnemy(t, 100, false);
+    }
+
+    // 全图范围伤害：联机对手无条件吃 100 点（满血 100 → 直接秒杀）
+    var struck = (Net && Net.sendSplash) ? Net.sendSplash(100) : 0;
+    if (struck > 0) { onHit(false); toast("💥 火箭弹波及 " + struck + " 名对手（100 伤害）"); }
+
+    // 自伤 20%（原来最高 70，太狠了）
+    var dp = new THREE.Vector3(player.x, player.y, player.z).distanceTo(pos);
+    if (dp < 5) hurtPlayer(20, "火箭弹爆炸");
+  }
+
+  function updateBlasts(dt) {
+    for (var i = blasts.length - 1; i >= 0; i--) {
+      var b = blasts[i]; b.life -= dt;
+      var k = 1 - b.life / b.max;
+      b.mesh.scale.setScalar(1 + k * 8);
+      b.mesh.material.opacity = Math.max(0, 0.9 * (1 - k));
+      b.light.intensity = 7 * Math.max(0, 1 - k);
+      if (b.life <= 0) { scene.remove(b.mesh); scene.remove(b.light); blasts.splice(i, 1); }
+    }
+  }
+
+  /* ==================================================================
+     7. 音效
+     ================================================================== */
+  var actx = null;
+  function audio() { if (actx) return actx; try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } return actx; }
+  audio();
+  var hornAudio = new Audio("assets/horn.mp3"); hornAudio.loop = true; hornAudio.volume = 0.8;   // 驾驶喇叭音效
+  function noiseBuffer(dur) {
+    var n = Math.floor(actx.sampleRate * dur), b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  }
+  function sfxShot(isSniper) {
+    if (!actx) return; var t = actx.currentTime;
+    var src = actx.createBufferSource(); src.buffer = noiseBuffer(0.25);
+    var filt = actx.createBiquadFilter(); filt.type = "lowpass";
+    filt.frequency.setValueAtTime(isSniper ? 2200 : 3200, t);
+    filt.frequency.exponentialRampToValueAtTime(300, t + 0.18);
+    var g = actx.createGain(); g.gain.setValueAtTime(isSniper ? 0.9 : 0.6, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + (isSniper ? 0.35 : 0.16));
+    src.connect(filt); filt.connect(g); g.connect(actx.destination); src.start(t); src.stop(t + 0.4);
+    var o = actx.createOscillator(); o.type = "sine"; o.frequency.setValueAtTime(isSniper ? 90 : 140, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+    var og = actx.createGain(); og.gain.setValueAtTime(0.7, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    o.connect(og); og.connect(actx.destination); o.start(t); o.stop(t + 0.2);
+  }
+  function sfxDry() {
+    if (!actx) return; var t = actx.currentTime;
+    var o = actx.createOscillator(); o.type = "square"; o.frequency.value = 1200;
+    var g = actx.createGain(); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.06);
+  }
+  function sfxReload() {
+    if (!actx) return; var t = actx.currentTime;
+    [0, 0.18, 0.4].forEach(function (d, i) {
+      var o = actx.createOscillator(); o.type = "square"; o.frequency.value = 600 + i * 200;
+      var g = actx.createGain(); g.gain.setValueAtTime(0.1, t + d); g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.06);
+      o.connect(g); g.connect(actx.destination); o.start(t + d); o.stop(t + d + 0.07);
+    });
+  }
+  function sfxRocket() {
+    if (!actx) return; var t = actx.currentTime;
+    var src = actx.createBufferSource(); src.buffer = noiseBuffer(0.7);
+    var filt = actx.createBiquadFilter(); filt.type = "lowpass";
+    filt.frequency.setValueAtTime(1800, t); filt.frequency.exponentialRampToValueAtTime(200, t + 0.6);
+    var g = actx.createGain(); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    src.connect(filt); filt.connect(g); g.connect(actx.destination); src.start(t); src.stop(t + 0.8);
+  }
+  function sfxExplosion() {
+    if (!actx) return; var t = actx.currentTime;
+    var src = actx.createBufferSource(); src.buffer = noiseBuffer(1.1);
+    var filt = actx.createBiquadFilter(); filt.type = "lowpass";
+    filt.frequency.setValueAtTime(900, t); filt.frequency.exponentialRampToValueAtTime(80, t + 0.9);
+    var g = actx.createGain(); g.gain.setValueAtTime(1.0, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
+    src.connect(filt); filt.connect(g); g.connect(actx.destination); src.start(t); src.stop(t + 1.1);
+    var o = actx.createOscillator(); o.type = "sine"; o.frequency.setValueAtTime(70, t);
+    o.frequency.exponentialRampToValueAtTime(28, t + 0.5);
+    var og = actx.createGain(); og.gain.setValueAtTime(0.9, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    o.connect(og); og.connect(actx.destination); o.start(t); o.stop(t + 0.6);
+  }
+  function sfxEnemyShot() {
+    if (!actx) return; var t = actx.currentTime;
+    var o = actx.createOscillator(); o.type = "square"; o.frequency.setValueAtTime(220, t);
+    o.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+    var g = actx.createGain(); g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.15);
+  }
+  function sfxEnemyDie() {
+    if (!actx) return; var t = actx.currentTime;
+    var o = actx.createOscillator(); o.type = "sawtooth"; o.frequency.setValueAtTime(170, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.3);
+    var g = actx.createGain(); g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.34);
+  }
+
+  /* ==================================================================
+     8. 纹理
+     ================================================================== */
+  function makeSkyTexture(night) {
+    var c = document.createElement("canvas"); c.width = 16; c.height = 256;
+    var g = c.getContext("2d");
+    var grd = g.createLinearGradient(0, 0, 0, 256);
+    if (night) {
+      grd.addColorStop(0, "#050a18"); grd.addColorStop(0.55, "#0d1730"); grd.addColorStop(1, "#22304e");
+    } else {
+      grd.addColorStop(0, "#2a4a72"); grd.addColorStop(0.5, "#6f9bc4"); grd.addColorStop(1, "#cdd9e4");
+    }
+    g.fillStyle = grd; g.fillRect(0, 0, 16, 256);
+    var t = new THREE.CanvasTexture(c); t.magFilter = THREE.LinearFilter; return t;
+  }
+
+  /* 夜晚窗户发光图：只画亮着的窗户（其余纯黑），与立面贴图同源同坐标，
+     直接当 emissiveMap 用 —— emissiveIntensity 归零即为白天。 */
+  function makeFacadeGlow(style, lit) {
+    var c = document.createElement("canvas"); c.width = c.height = 128;
+    var g = c.getContext("2d");
+    g.fillStyle = "#000"; g.fillRect(0, 0, 128, 128);
+    if (style === "glass") {                       // 幕墙：整面微亮冷光
+      g.fillStyle = "rgba(150,185,225," + (0.16 + lit * 0.20).toFixed(2) + ")";
+      g.fillRect(6, 6, 116, 52);
+      g.fillStyle = "rgba(150,185,225," + (0.09 + lit * 0.13).toFixed(2) + ")";
+      g.fillRect(6, 70, 116, 52);
+    } else if (style === "resi") {                 // 住宅：暖黄窗，有的没开灯
+      g.fillStyle = Math.random() < 0.55 + lit * 0.3 ? "rgba(255,214,150,.95)" : "rgba(120,140,180,.22)";
+      g.fillRect(28, 28, 72, 52);
+    } else if (style === "brick") {                // 砖楼：暖黄窄窗
+      g.fillStyle = Math.random() < 0.5 + lit * 0.3 ? "rgba(255,206,140,.9)" : "rgba(110,130,170,.20)";
+      g.fillRect(37, 31, 54, 46);
+    } else {                                       // 办公：长窗带冷白，隔几段灭灯
+      g.fillStyle = "rgba(200,220,255," + (0.32 + lit * 0.34).toFixed(2) + ")";
+      g.fillRect(0, 32, 128, 54);
+      g.fillStyle = "rgba(0,0,0,.45)";
+      for (var i = 0; i < 4; i++) if (Math.random() < 0.35) g.fillRect(i * 32, 32, 32, 54);
+    }
+    return c;
+  }
+
+  /* 底层商铺贴图：一个开间 = 一间店面（3m × 3.4m）。
+     从上到下依次是雨棚招牌 / 橱窗 / 勒脚，部分开间带门。 */
+  function makeShopCanvas(v) {
+    var AWNING = ["#8e3b3b", "#2f6f6f", "#7a6a2f", "#3f5b8e", "#6b3b6b"];
+    var c = document.createElement("canvas"); c.width = c.height = 128;
+    var g = c.getContext("2d");
+    g.fillStyle = "#23272c"; g.fillRect(0, 0, 128, 128);            // 店面框
+    g.fillStyle = AWNING[(v + (Math.random() * AWNING.length | 0)) % AWNING.length];
+    g.fillRect(0, 8, 128, 26);                                       // 雨棚
+    g.fillStyle = "rgba(0,0,0,.28)"; g.fillRect(0, 30, 128, 6);      // 雨棚阴影
+    g.fillStyle = "#d9d3c5"; g.fillRect(10, 10, 108, 14);            // 招牌底板
+    g.fillStyle = "rgba(0,0,0,.35)";
+    for (var i = 0; i < 4; i++) g.fillRect(16 + i * 26, 14, 14 + (i % 2) * 6, 6);   // 招牌上的"字"
+    g.fillStyle = "#161b20"; g.fillRect(6, 42, 116, 46);             // 橱窗
+    g.fillStyle = "rgba(120,150,170,.10)"; g.fillRect(6, 42, 116, 16);
+    g.fillStyle = "#2b3138"; g.fillRect(6, 62, 116, 3);              // 窗框横档
+    g.fillStyle = "#191c20"; g.fillRect(0, 96, 128, 32);             // 勒脚
+    g.fillStyle = "rgba(255,255,255,.05)"; g.fillRect(0, 94, 128, 2);
+    if (Math.random() < 0.34) {                                      // 三分之一开间带门
+      g.fillStyle = "#15181c"; g.fillRect(76, 44, 34, 84);
+      g.fillStyle = "rgba(120,150,170,.12)"; g.fillRect(80, 48, 26, 34);
+      g.fillStyle = "#6b7280"; g.fillRect(100, 86, 4, 4);            // 门把手
+    }
+    return c;
+  }
+  /* 夜间版：招牌 + 橱窗内透 + 雨棚下灯带 */
+  function makeShopGlow(v) {
+    var c = document.createElement("canvas"); c.width = c.height = 128;
+    var g = c.getContext("2d");
+    g.fillStyle = "#000"; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = "rgba(255,238,205,.95)"; g.fillRect(10, 10, 108, 14);   // 招牌亮
+    g.fillStyle = "rgba(255,198,120,.55)"; g.fillRect(6, 42, 116, 46);    // 橱窗内透
+    g.fillStyle = "rgba(255,190,110,.35)"; g.fillRect(0, 34, 128, 4);     // 雨棚下灯带
+    g.fillStyle = "rgba(0,0,0,.5)";
+    for (var i = 0; i < 3; i++) if (Math.random() < 0.4) g.fillRect(6 + i * 40, 42, 34, 46);  // 有些店没开灯
+    return c;
+  }
+
+  /* 灯头光晕：径向渐变，配 additive 混合 */
+  function makeGlowTexture() {
+    var c = document.createElement("canvas"); c.width = c.height = 128;
+    var g = c.getContext("2d");
+    var grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grd.addColorStop(0, "rgba(255,228,168,.95)");
+    grd.addColorStop(0.25, "rgba(255,202,124,.42)");
+    grd.addColorStop(1, "rgba(255,180,90,0)");
+    g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  }
+  /* 整张城市平面图：180m × 180m 画进 2048² 画布（约 11.4 px/m）。
+     道路 / 人行道 / 街区 / 标线全部程序化绘制，与 ROADS / CITY_BLOCKS
+     共用同一套世界坐标 —— 贴图上的路和建筑脚下的路严格对齐。
+     坐标换算（r128 PlaneGeometry，rotation.x = -90°）：
+     u = (x + 90) / 180，v = (90 - z) / 180；CanvasTexture 默认 flipY，
+     故画布 px = (x + 90) * PX，py = (z + 90) * PX（北 = -z 在画布上方）。 */
+  function makeCityTexture() {
+    var S = 2048, M = MAP.ground, PX = S / M;
+    var c = document.createElement("canvas"); c.width = c.height = S;
+    var g = c.getContext("2d");
+    var X = function (x) { return (x + M / 2) * PX; };
+    var Z = function (z) { return (z + M / 2) * PX; };
+    function rect(x0, z0, x1, z1, style) {
+      g.fillStyle = style;
+      g.fillRect(X(x0), Z(z0), (x1 - x0) * PX, (z1 - z0) * PX);
+    }
+
+    /* ① 底色 + 噪点，打破纯色平面 */
+    rect(-M / 2, -M / 2, M / 2, M / 2, "#2f3237");
+    for (var i = 0; i < 2200; i++) {
+      g.fillStyle = Math.random() > 0.5
+        ? "rgba(255,255,255," + (0.012 + Math.random() * 0.022).toFixed(3) + ")"
+        : "rgba(0,0,0," + (0.015 + Math.random() * 0.028).toFixed(3) + ")";
+      var s = 2 + Math.random() * 7;
+      g.fillRect(Math.random() * S, Math.random() * S, s, s);
+    }
+
+    /* ② 街区：人行道满铺 + 伸缩缝；中央 4 块是广场，其余盖上深色地块 */
+    CITY_BLOCKS.forEach(function (bk) {
+      rect(bk.x0, bk.z0, bk.x1, bk.z1, bk.central ? "#85898f" : "#7b8086");
+      g.strokeStyle = "rgba(0,0,0,.13)";
+      g.lineWidth = 1;
+      for (var t = bk.x0 + 1.5; t < bk.x1 - 0.6; t += 1.5) {
+        g.beginPath(); g.moveTo(X(t), Z(bk.z0) + 1); g.lineTo(X(t), Z(bk.z1) - 1); g.stroke();
+      }
+      for (var u = bk.z0 + 1.5; u < bk.z1 - 0.6; u += 1.5) {
+        g.beginPath(); g.moveTo(X(bk.x0) + 1, Z(u)); g.lineTo(X(bk.x1) - 1, Z(u)); g.stroke();
+      }
+      if (bk.central) return;
+      rect(bk.x0 + SIDEWALK, bk.z0 + SIDEWALK, bk.x1 - SIDEWALK, bk.z1 - SIDEWALK, "#383c42");
+      for (var k = 0; k < 3; k++) {                       // 地块里的油渍 / 水渍
+        g.fillStyle = "rgba(0,0,0,.10)";
+        g.beginPath();
+        g.ellipse(
+          X(bk.x0 + SIDEWALK + Math.random() * (bk.x1 - bk.x0 - SIDEWALK * 2)),
+          Z(bk.z0 + SIDEWALK + Math.random() * (bk.z1 - bk.z0 - SIDEWALK * 2)),
+          (0.6 + Math.random() * 1.5) * PX, (0.5 + Math.random() * 1.1) * PX,
+          Math.random() * Math.PI, 0, Math.PI * 2);
+        g.fill();
+      }
+    });
+
+    /* ③ 路缘石：街区外缘一圈深色收边 */
+    g.strokeStyle = "#54585d";
+    g.lineWidth = Math.max(1, 0.18 * PX);
+    CITY_BLOCKS.forEach(function (bk) {
+      g.strokeRect(X(bk.x0) + 1, Z(bk.z0) + 1, (bk.x1 - bk.x0) * PX - 2, (bk.z1 - bk.z0) * PX - 2);
+    });
+
+    /* ④ 沥青路面（向街区内多画 0.15m，盖掉与人行道的接缝） */
+    ROADS.forEach(function (cx) { rect(cx - ROAD_HW - 0.15, -M / 2, cx + ROAD_HW + 0.15, M / 2, "#2b2e33"); });
+    ROADS.forEach(function (cz) { rect(-M / 2, cz - ROAD_HW - 0.15, M / 2, cz + ROAD_HW + 0.15, "#2b2e33"); });
+
+    /* ⑤ 路面补丁：每段路随机一两块深浅不一的修补区 */
+    function patch(x0, z0, x1, z1) { rect(x0, z0, x1, z1, Math.random() > 0.5 ? "#303439" : "#272a2e"); }
+    ROADS.forEach(function (cx) {
+      for (var s = -84; s < 84; s += 21) {
+        if (Math.random() < 0.35) continue;
+        var pw = 2 + Math.random() * 4, pd = 3 + Math.random() * 6;
+        var px = cx - ROAD_HW + 1 + Math.random() * (ROAD_HW * 2 - 2 - pw);
+        var pz = s + Math.random() * (21 - pd);
+        patch(px, pz, px + pw, pz + pd);
+      }
+    });
+    ROADS.forEach(function (cz) {
+      for (var s2 = -84; s2 < 84; s2 += 21) {
+        if (Math.random() < 0.35) continue;
+        var pw2 = 2 + Math.random() * 4, pd2 = 3 + Math.random() * 6;
+        var px2 = s2 + Math.random() * (21 - pd2);
+        var pz2 = cz - ROAD_HW + 1 + Math.random() * (ROAD_HW * 2 - 2 - pw2);
+        patch(px2, pz2, px2 + pd2, pz2 + pw2);
+      }
+    });
+
+    /* ⑥ 车道线：道路被交叉口切成 6 段，逐段画边线 + 中心线。
+          主干道（0 号线）双黄线，其余白虚线；边线白色实线。 */
+    var marks = [-M / 2];
+    ROADS.forEach(function (cc) { marks.push(cc - ROAD_HW - 0.4, cc + ROAD_HW + 0.4); });
+    marks.push(M / 2);
+    marks.sort(function (a, b) { return a - b; });
+    var SEGS = [];
+    for (var i = 0; i < marks.length - 1; i += 2) SEGS.push([marks[i], marks[i + 1]]);
+    SEGS.forEach(function (sg) {
+      if (sg[1] - sg[0] < 1) return;
+      ROADS.forEach(function (cx) {                 // 纵向路
+        rect(cx - ROAD_HW + 0.45, sg[0], cx - ROAD_HW + 0.59, sg[1], "rgba(255,255,255,.5)");
+        rect(cx + ROAD_HW - 0.59, sg[0], cx + ROAD_HW - 0.45, sg[1], "rgba(255,255,255,.5)");
+        if (cx === 0) {
+          rect(cx - 0.285, sg[0], cx - 0.155, sg[1], "rgba(232,196,74,.85)");
+          rect(cx + 0.155, sg[0], cx + 0.285, sg[1], "rgba(232,196,74,.85)");
+        } else {
+          g.fillStyle = "rgba(255,255,255,.45)";
+          for (var z = sg[0]; z < sg[1] - 0.4; z += 4.8) {
+            g.fillRect(X(cx - 0.07), Z(z), 0.14 * PX, Math.min(3, sg[1] - z) * PX);
+          }
+        }
+      });
+      ROADS.forEach(function (cz) {                 // 横向路
+        rect(sg[0], cz - ROAD_HW + 0.45, sg[1], cz - ROAD_HW + 0.59, "rgba(255,255,255,.5)");
+        rect(sg[0], cz + ROAD_HW - 0.59, sg[1], cz + ROAD_HW - 0.45, "rgba(255,255,255,.5)");
+        if (cz === 0) {
+          rect(sg[0], cz - 0.285, sg[1], cz - 0.155, "rgba(232,196,74,.85)");
+          rect(sg[0], cz + 0.155, sg[1], cz + 0.285, "rgba(232,196,74,.85)");
+        } else {
+          g.fillStyle = "rgba(255,255,255,.45)";
+          for (var x = sg[0]; x < sg[1] - 0.4; x += 4.8) {
+            g.fillRect(X(x), Z(cz - 0.07), Math.min(3, sg[1] - x) * PX, 0.14 * PX);
+          }
+        }
+      });
+    });
+
+    /* ⑦ 交叉口：擦净标线 → 四向斑马线 + 停止线 */
+    ROADS.forEach(function (cx) {
+      ROADS.forEach(function (cz) {
+        rect(cx - ROAD_HW - 0.3, cz - ROAD_HW - 0.3, cx + ROAD_HW + 0.3, cz + ROAD_HW + 0.3, "#2b2e33");
+        g.fillStyle = "rgba(255,255,255,.78)";
+        for (var i = 0; i < 6; i++) {                // 竖向路的南 / 北口（条纹沿 z，横跨 x）
+          var zN = cz - ROAD_HW - 0.6 - i * 0.92, zS = cz + ROAD_HW + 0.6 + i * 0.92;
+          g.fillRect(X(cx - ROAD_HW + 0.5), Z(zN), (ROAD_HW * 2 - 1) * PX, 0.5 * PX);
+          g.fillRect(X(cx - ROAD_HW + 0.5), Z(zS), (ROAD_HW * 2 - 1) * PX, 0.5 * PX);
+        }
+        for (var j = 0; j < 6; j++) {                // 横向路的西 / 东口（条纹沿 x，横跨 z）
+          var xW = cx - ROAD_HW - 0.6 - j * 0.92, xE = cx + ROAD_HW + 0.6 + j * 0.92;
+          g.fillRect(X(xW), Z(cz - ROAD_HW + 0.5), 0.5 * PX, (ROAD_HW * 2 - 1) * PX);
+          g.fillRect(X(xE), Z(cz - ROAD_HW + 0.5), 0.5 * PX, (ROAD_HW * 2 - 1) * PX);
+        }
+        rect(cx - ROAD_HW + 0.6, cz - ROAD_HW - 6.1, cx + ROAD_HW - 0.6, cz - ROAD_HW - 5.75, "rgba(255,255,255,.85)");
+        rect(cx - ROAD_HW + 0.6, cz + ROAD_HW + 5.75, cx + ROAD_HW - 0.6, cz + ROAD_HW + 6.1, "rgba(255,255,255,.85)");
+        rect(cx - ROAD_HW - 6.1, cz - ROAD_HW + 0.6, cx - ROAD_HW - 5.75, cz + ROAD_HW - 0.6, "rgba(255,255,255,.85)");
+        rect(cx + ROAD_HW + 5.75, cz - ROAD_HW + 0.6, cx + ROAD_HW + 6.1, cz + ROAD_HW - 0.6, "rgba(255,255,255,.85)");
+      });
+    });
+
+    /* ⑧ 井盖 */
+    function manhole(x, z) {
+      g.fillStyle = "#1b1e22";
+      g.beginPath(); g.arc(X(x), Z(z), 0.36 * PX, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "#3c4147"; g.lineWidth = Math.max(1, 0.07 * PX);
+      g.beginPath(); g.arc(X(x), Z(z), 0.36 * PX, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = "#2c3036";
+      g.beginPath(); g.arc(X(x - 0.16), Z(z - 0.16), 0.06 * PX, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(X(x + 0.16), Z(z + 0.16), 0.06 * PX, 0, Math.PI * 2); g.fill();
+    }
+    ROADS.forEach(function (cx) {
+      for (var s3 = -78; s3 < 78; s3 += 26) {
+        if (Math.random() < 0.4) continue;
+        manhole(cx + (Math.random() > 0.5 ? 2.6 : -2.6), s3 + Math.random() * 14);
+      }
+    });
+    ROADS.forEach(function (cz) {
+      for (var s4 = -78; s4 < 78; s4 += 26) {
+        if (Math.random() < 0.4) continue;
+        manhole(s4 + Math.random() * 14, cz + (Math.random() > 0.5 ? 2.6 : -2.6));
+      }
+    });
+
+    return new THREE.CanvasTexture(c);
+  }
+  /* 建筑立面：一张贴图 = 一个开间（3.0m）× 一层楼（3.4m）。
+     四种风格 —— 玻璃幕墙 / 住宅 / 老砖楼 / 办公横向长窗，
+     每种里随机亮灯，两张底图错开重复感。 */
+  function makeFacadeCanvas(style) {
+    var c = document.createElement("canvas"); c.width = c.height = 128;
+    var g = c.getContext("2d");
+    var i, y, x;
+
+    if (style === "glass") {                       // 玻璃幕墙：冷色玻璃 + 竖向反光 + 分格
+      g.fillStyle = "#45515d"; g.fillRect(0, 0, 128, 128);
+      for (i = 0; i < 5; i++) {
+        g.fillStyle = "rgba(255,255,255," + (0.04 + Math.random() * 0.09).toFixed(3) + ")";
+        g.fillRect(Math.random() * 110, 0, 6 + Math.random() * 16, 128);
+      }
+      g.fillStyle = "rgba(150,185,215,.16)"; g.fillRect(8, 8, 112, 46);   // 一块亮玻璃
+      g.strokeStyle = "#28303a"; g.lineWidth = 4;
+      g.strokeRect(0, 0, 128, 128);
+      g.beginPath(); g.moveTo(0, 64); g.lineTo(128, 64); g.stroke();      // 横向分格
+
+    } else if (style === "resi") {                 // 住宅楼：暖灰墙 + 开窗 + 阳台
+      g.fillStyle = "#8b8478"; g.fillRect(0, 0, 128, 128);
+      g.fillStyle = "#75706a"; g.fillRect(0, 116, 128, 12);               // 楼层带
+      g.fillStyle = "#33383d"; g.fillRect(24, 24, 80, 60);                // 窗框
+      g.fillStyle = Math.random() < 0.35 ? "#ffe6a8" : "#2b323b";         // 亮灯 / 暗窗
+      g.fillRect(28, 28, 72, 52);
+      g.strokeStyle = "#5a5751"; g.lineWidth = 3; g.strokeRect(24, 24, 80, 60);
+      g.fillStyle = "#9a948a"; g.fillRect(20, 88, 88, 8);                 // 阳台
+
+    } else if (style === "brick") {                // 老砖楼：砖缝 + 窄窗 + 空调外机
+      g.fillStyle = "#6b4a41"; g.fillRect(0, 0, 128, 128);
+      g.fillStyle = "rgba(0,0,0,.10)";
+      for (y = 0; y < 128; y += 9) g.fillRect(0, y, 128, 1);
+      for (x = 0; x < 128; x += 16) g.fillRect(x, 0, 1, 128);
+      g.fillStyle = "#e8e2d6"; g.fillRect(34, 28, 60, 52);                // 白窗框
+      g.fillStyle = Math.random() < 0.3 ? "#f4d79b" : "#26303a";
+      g.fillRect(37, 31, 54, 46);
+      g.fillStyle = "#3b3b3b"; g.fillRect(88, 86, 16, 12);                // 空调外机
+
+    } else {                                       // 办公楼：横向长窗带（ribbon）
+      g.fillStyle = "#565c64"; g.fillRect(0, 0, 128, 128);
+      g.fillStyle = "#2f3945"; g.fillRect(0, 32, 128, 54);                // 玻璃带
+      g.fillStyle = "rgba(160,190,220,.20)"; g.fillRect(0, 32, 128, 18);
+      g.fillStyle = "#4a5058"; g.fillRect(0, 86, 128, 12);                // 窗台檐
+      g.fillStyle = "rgba(255,255,255,.06)";
+      for (i = 0; i < 4; i++) g.fillRect(i * 32 + 2, 34, 1, 50);          // 竖向分格
+    }
+    return c;
+  }
+
+  /* ==================================================================
+     9. 联机（MQTT over WebSocket）
+     ------------------------------------------------------------------
+     静态站点没有后端，用公共 MQTT 中继做消息中转：房间码 = topic 前缀，
+     无需注册即可开黑。所有位置/朝向/开火都走同一个 topic，10Hz 广播。
+     CDN 拉不到 mqtt.js 时自动降级为单机模式，不影响原有玩法。
+     ================================================================== */
+  var Net = (function () {
+    var NET = {
+      connected: false, connecting: false, room: "", pid: "", nick: "",
+      client: null, remote: {}, sendAt: 0, libLoaded: false, lastErr: ""
+    };
+
+    var remoteMatCache = {};
+    function remoteMat(hex) {
+      if (!remoteMatCache[hex]) remoteMatCache[hex] = new THREE.MeshLambertMaterial({ color: parseInt(hex, 16) });
+      return remoteMatCache[hex];
+    }
+    var PALETTE = ["3f7fd1", "d18f3f", "58c17f", "c158d1", "d15858", "58c1c9", "c9c158", "8f58c1"];
+
+    function makeLabel(text, color) {
+      var c = document.createElement("canvas"); c.width = 256; c.height = 64;
+      var g = c.getContext("2d");
+      g.font = "bold 30px 'PingFang SC','Microsoft YaHei',sans-serif";
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.lineWidth = 7; g.strokeStyle = "rgba(0,0,0,.85)"; g.strokeText(text, 128, 34);
+      g.fillStyle = color; g.fillText(text, 128, 34);
+      var t = new THREE.CanvasTexture(c);
+      var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+      s.scale.set(2.4, 0.6, 1);
+      return s;
+    }
+
+    function ensureRemote(pid, nick) {
+      if (NET.remote[pid]) return NET.remote[pid];
+      var hex = PALETTE[(Math.abs(hashCode(pid)) % PALETTE.length)];
+      var m = remoteMat(hex);
+      var g = makeHumanoid(m, m, remoteMat("404650"));
+      g.userData.pid = pid;
+      var label = makeLabel(nick || pid.slice(0, 4), "#" + hex);
+      label.position.y = 3.85;
+      g.add(label);
+      g.userData.label = label;
+      scene.add(g);
+      NET.remote[pid] = {
+        pid: pid, nick: nick || pid.slice(0, 4), group: g, color: hex,
+        alive: true, hp: 100,
+        pos: new THREE.Vector3(), yaw: 0, pitch: 0,
+        target: new THREE.Vector3(), targetYaw: 0,
+        lastSeen: performance.now(), deaths: 0, kills: 0
+      };
+      return NET.remote[pid];
+    }
+    function hashCode(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+
+    function removeRemote(pid) {
+      var r = NET.remote[pid];
+      if (r && r.group) scene.remove(r.group);
+      delete NET.remote[pid];
+      renderPlayers();
+    }
+
+    function renderPlayers() {
+      var box = $("mpPlayers");
+      if (!box) return;
+      var html = "";
+      for (var pid in NET.remote) {
+        var r = NET.remote[pid];
+        html += '<span style="border-left:3px solid #' + r.color + ';padding-left:8px;">' +
+                escapeHtml(r.nick) + " · " + r.kills + " 杀</span>";
+      }
+      if (NET.connected) html += '<span style="opacity:.6;">（你：' + escapeHtml(NET.nick) + " · " + myKills + " 杀）</span>";
+      box.innerHTML = html;
+    }
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    }); }
+
+    function setStatus(html) { var el = $("mpStatus"); if (el) el.innerHTML = html; }
+
+    function loadMqtt(cb) {
+      if (window.mqtt) { NET.libLoaded = true; cb(true); return; }
+      // 本地优先：避免国内访问 unpkg / jsdelivr 不稳定导致 mqtt.js 加载失败、中继整体失效
+      var urls = [
+        "assets/lib/mqtt.min.js",
+        "https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js",
+        "https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"
+      ];
+      var i = 0;
+      (function next() {
+        if (i >= urls.length) { cb(false); return; }
+        var s = document.createElement("script");
+        s.src = urls[i++];
+        s.onload = function () { NET.libLoaded = !!window.mqtt; cb(NET.libLoaded); };
+        s.onerror = next;
+        document.head.appendChild(s);
+      })();
+    }
+
+    // 多中继兜底：依次尝试若干公共 broker，任一连上即用；全部失败才回调 null
+    var MQTT_BROKERS = [
+      "wss://broker.emqx.io:8084/mqtt",
+      "wss://broker.hivemq.com:8884/mqtt"
+    ];
+    function connectMqtt(opts, onReady) {
+      var i = 0;
+      (function tryNext() {
+        if (i >= MQTT_BROKERS.length) { onReady(null); return; }
+        var url = MQTT_BROKERS[i++];
+        var cl;
+        try { cl = window.mqtt.connect(url, Object.assign({}, opts)); }
+        catch (e) { tryNext(); return; }
+        var done = false;
+        var to = setTimeout(function () {
+          if (done) return; done = true;
+          try { cl.end(true); } catch (e) {}
+          tryNext();
+        }, opts.connectTimeout || 9000);
+        cl.on("connect", function () {
+          if (done) return; done = true; clearTimeout(to); onReady(cl);
+        });
+        cl.on("error", function () {
+          if (done) return; done = true; clearTimeout(to); tryNext();
+        });
+      })();
+    }
+
+    NET.join = function (room, nick) {
+      if (!room) { toast("请输入房间码"); return; }
+      if (NET.connected || NET.connecting) return;
+      NET.connecting = true;
+      NET.room = String(room).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      NET.nick = (nick || "").trim() || ("P" + Math.floor(Math.random() * 900 + 100));
+      NET.pid = "p" + Math.random().toString(36).slice(2, 8);
+      SET.room = NET.room; SET.nick = NET.nick; saveSet();
+      setStatus('<span class="wait">正在加载联机组件…</span>');
+
+      loadMqtt(function (ok) {
+        if (!ok) {
+          NET.connecting = false;
+          setStatus('<span class="err">联机组件加载失败（可能被网络/CDN 拦截），已保持单人模式</span>');
+          toast("联机不可用，继续单人练习");
+          return;
+        }
+        setStatus('<span class="wait">正在连接房间 ' + NET.room + " …</span>");
+        var joinOpts = {
+          clientId: "csr_" + NET.pid + "_" + Math.random().toString(36).slice(2, 8),
+          keepalive: 25, clean: true, reconnectPeriod: 2000, connectTimeout: 9000,
+          // 离线遗嘱：异常断开时通知房间内其他人移除自己
+          will: {
+            topic: "cityrange/" + NET.room + "/bye",
+            payload: JSON.stringify({ i: NET.pid }), qos: 0, retain: false
+          }
+        };
+        connectMqtt(joinOpts, function (cl) {
+          if (!cl) {
+            NET.connecting = false;
+            setStatus('<span class="err">所有中继均连接失败，已保持单人模式</span>');
+            toast("联机不可用，继续单人练习");
+            return;
+          }
+          NET.client = cl;
+          cl.on("connect", function () {
+            NET.connected = true; NET.connecting = false;
+            cl.subscribe("cityrange/" + NET.room + "/+", { qos: 0 }, function (err) {
+              if (err) setStatus('<span class="err">订阅失败</span>');
+            });
+            setStatus('<span class="ok">已加入房间 ' + NET.room + "</span> · 把房间码给朋友即可一起玩");
+            toast("已加入房间 " + NET.room);
+            setHudVisibility();
+            sendState(true);
+            renderPlayers();
+          });
+          cl.on("error", function (e) {
+            NET.lastErr = (e && e.message) || "连接错误";
+            setStatus('<span class="err">连接错误：' + escapeHtml(NET.lastErr) + "</span>");
+          });
+          cl.on("reconnect", function () { setStatus('<span class="wait">连接中断，正在重连…</span>'); });
+          cl.on("close", function () {
+            if (NET.connected) { NET.connected = false; setStatus('<span class="err">已断开连接</span>'); setHudVisibility(); }
+          });
+          cl.on("message", function (topic, payload) {
+            if (!NET.connected) return;
+            var m;
+            try { m = JSON.parse(payload.toString()); } catch (e) { return; }
+            if (!m || m.i === NET.pid) return;
+            var kind = topic.split("/").pop();
+            if (kind === "state") onState(m);
+            else if (kind === "shot") onShot(m);
+            else if (kind === "hit") onHitMsg(m);
+            else if (kind === "bye") removeRemote(m.i);
+          });
+        });
+      });
+    };
+
+    NET.leave = function () {
+      if (NET.client) {
+        try {
+          NET.client.publish("cityrange/" + NET.room + "/bye", JSON.stringify({ i: NET.pid }), { qos: 0 });
+          NET.client.end(true);
+        } catch (e) {}
+      }
+      for (var pid in NET.remote) removeRemote(pid);
+      NET.client = null; NET.connected = false; NET.connecting = false; NET.room = "";
+      myKills = 0; myDeaths = 0; hp = 100; dead = false;
+      setStatus("未连接 · 单人练习中");
+      setHudVisibility(); renderPlayers();
+      toast("已退出联机");
+    };
+
+    function onState(m) {
+      var isNew = !NET.remote[m.i];
+      var r = ensureRemote(m.i, m.n);
+      if (isNew) renderPlayers();
+      r.nick = m.n || r.nick;
+      // 收到的是「眼高」，而人形模型的脚底在 y=0 —— 换算成模型基座高度：
+      // 站立时基座为 0（顺带修正远端玩家整体上浮 1.7 的问题），跳跃时随之上抬。
+      r.target.set(m.x, Math.max(0, m.y - EYE_STAND), m.z);
+      r.targetYaw = m.a;
+      r.lastSeen = performance.now();
+      var crouch = !!m.c;
+      if (r.group && r.crouch !== crouch) {
+        r.crouch = crouch;
+        r.group.scale.y = crouch ? 0.62 : 1;                        // 蹲下压低身体（脚底不动）
+        var lb = r.group.userData.label;
+        if (lb) lb.scale.set(2.4, crouch ? 0.6 / 0.62 : 0.6, 1);    // 抵消压缩，名牌不变形
+      }
+      if (typeof m.k === "number") r.kills = m.k;
+      if (typeof m.h === "number") {
+        r.hp = m.h;
+        if (m.h <= 0 && r.alive) { r.alive = false; r.deaths++; }
+        else if (m.h > 0 && !r.alive) r.alive = true;
+      }
+      if (r.group) r.group.visible = (r.hp > 0);
+    }
+
+    function onShot(m) {
+      var r = NET.remote[m.i];
+      if (!r || !r.group) return;
+      // 别人开枪：画一条曳光（从它的枪口沿着它的朝向）
+      var from = new THREE.Vector3(m.o[0], m.o[1], m.o[2]);
+      var dir = new THREE.Vector3(m.d[0], m.d[1], m.d[2]).normalize();
+      var to = from.clone().add(dir.multiplyScalar(m.len || 60));
+      spawnTracer(from, to);
+    }
+
+    function onHitMsg(m) {
+      if (m.t && m.t !== NET.pid) return;         // 不是打我的
+      if (dead) return;
+      var dmg = m.d || 25;
+      applyDamage(dmg, m.i, !!m.hs);
+    }
+
+    function applyDamage(dmg, fromPid, isHead) {
+      if (dead) return;
+      hp -= dmg;
+      var bar = $("hpbar").firstElementChild;
+      bar.style.width = Math.max(0, hp) + "%";
+      $("hpbar").classList.toggle("low", hp <= 35);
+      if (hp <= 0) {
+        hp = 0; dead = true; myDeaths++;
+        toast("被 " + (NET.remote[fromPid] ? NET.remote[fromPid].nick : "对手") + " 击倒，3 秒后重生");
+        killfeed(NET.remote[fromPid] ? NET.remote[fromPid].nick : "对手", isHead);
+        setTimeout(function () { respawn(); }, 3000);
+      }
+      updateHp();
+    }
+
+    NET.sendShot = function (origin, dir, isHead, victimPid, point) {
+      if (!NET.connected) return;
+      var len = point ? origin.distanceTo(point) : 60;
+      publish("shot", { i: NET.pid, o: [r2(origin.x), r2(origin.y), r2(origin.z)],
+        d: [r3(dir.x), r3(dir.y), r3(dir.z)], len: r2(len) });
+      if (victimPid) {
+        var spec = WPN[cur];
+        var dmg = spec.dmg * (isHead ? 2.2 : 1);
+        publish("hit", { i: NET.pid, t: victimPid, d: Math.round(dmg), hs: !!isHead });
+        // 由射击方判定，命中即计入自己的击杀（命中反馈即时，不做服务端权威）
+        if (dmg >= (NET.remote[victimPid] ? NET.remote[victimPid].hp : 999)) {
+          myKills++;
+          renderPlayers();
+        }
+      }
+    };
+
+    /* 火箭弹全图溅射：给所有联机对手发伤害，不受距离限制。
+       注意 WPN.rpg.dmg 是 0（火箭弹走独立弹道分支），所以这里必须显式给伤害值。 */
+    NET.sendSplash = function (dmg) {
+      if (!NET.connected) return 0;
+      var n = 0;
+      for (var pid in NET.remote) {
+        var r = NET.remote[pid];
+        if (!r || !r.alive) continue;
+        publish("hit", { i: NET.pid, t: pid, d: Math.round(dmg), hs: false });
+        // 由射击方判定击杀（与 sendShot 一致，不做服务端权威）
+        if (Math.round(dmg) >= (typeof r.hp === "number" ? r.hp : 100)) myKills++;
+        n++;
+      }
+      if (n) renderPlayers();
+      return n;
+    };
+
+    var forceState = false;
+    NET.sendState = function (force) { if (force) forceState = true; };
+
+    NET.tick = function (now) {
+      if (!NET.connected) return;
+      if (forceState || now - NET.sendAt > 0.1) {
+        NET.sendAt = now; forceState = false;
+        publish("state", {
+          i: NET.pid, n: NET.nick,
+          x: r2(player.x), y: r2(player.y), z: r2(player.z),
+          a: r3(yaw), p: r3(pitch), w: cur === "sniper" ? 1 : 0,
+          h: Math.max(0, Math.round(hp)), k: myKills,
+          c: crouching ? 1 : 0                     // 蹲下状态（远端据此压缩模型与命中框）
+        });
+      }
+      // 超时未上报的玩家清理掉
+      for (var pid in NET.remote) {
+        var r = NET.remote[pid];
+        if (now - r.lastSeen > 8000) { removeRemote(pid); continue; }
+        if (r.group) {
+          r.pos.lerp(r.target, 0.28);
+          r.group.position.copy(r.pos);
+          r.group.rotation.y = r.targetYaw;
+        }
+      }
+    };
+
+    NET.statusLine = function () {
+      if (!NET.connected) return "单人模式（Tab 可查看联机状态）";
+      var n = 0; for (var k in NET.remote) n++;
+      return "房间 " + NET.room + " · 在线 " + (n + 1) + " 人 · " + myKills + " 杀 / " + myDeaths + " 死";
+    };
+
+    function publish(kind, obj) {
+      if (!NET.client || !NET.connected) return;
+      try { NET.client.publish("cityrange/" + NET.room + "/" + kind, JSON.stringify(obj), { qos: 0, retain: false }); } catch (e) {}
+    }
+    function r2(v) { return Math.round(v * 100) / 100; }
+    function r3(v) { return Math.round(v * 1000) / 1000; }
+
+    NET.renderPlayers = renderPlayers;
+    NET.removeRemote = removeRemote;
+    NET.loadMqtt = loadMqtt;          // 排行榜也要用，复用同一个 mqtt.js 加载器
+    NET.connectMqtt = connectMqtt;    // 排行榜也要用，复用同一个多中继连接逻辑
+    return NET;
+  })();
+
+  var hp = 100, dead = false, myKills = 0, myDeaths = 0;
+
+  function updateHp() {
+    var bar = $("hpbar").firstElementChild;
+    if (bar) bar.style.width = Math.max(0, hp) + "%";
+    $("hpbar").classList.toggle("low", hp <= 35);
+  }
+  function respawn() {
+    var ang = Math.random() * Math.PI * 2, r = 9 + Math.random() * 17;
+    player.set(Math.cos(ang) * r, EYE_STAND, Math.sin(ang) * r);
+    crouching = false; vy = 0; onGround = true; sprinting = false;   // 重生复位成站立
+    hp = 100; dead = false; ammo = WPN[cur].mag;
+    updateHp(); updateHud();
+    toast("已重生");
+  }
+
+  // 非联机来源的伤害（自己被爆炸波及等）
+  function hurtPlayer(dmg, who) {
+    if (dead || dmg <= 0) return;
+    hp -= dmg;
+    updateHp();
+    if (hp <= 0) {
+      hp = 0; dead = true; myDeaths++;
+      toast("被" + who + "击倒，3 秒后重生");
+      setTimeout(function () { respawn(); }, 3000);
+    }
+  }
+
+  function killfeed(killer, head) {
+    var box = $("killfeed");
+    if (!box) return;
+    var d = document.createElement("div");
+    d.innerHTML = "<b>" + String(killer).replace(/[<>]/g, "") + "</b> 击倒了你" + (head ? "（爆头）" : "");
+    box.appendChild(d);
+    setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 4000);
+  }
+
+  (function bindNet() {
+    $("mpJoin").addEventListener("click", function (e) {
+      e.stopPropagation();
+      Net.join($("room").value, $("nick").value);
+    });
+    $("mpRand").addEventListener("click", function (e) {
+      e.stopPropagation();
+      var code = "";
+      var cs = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      for (var i = 0; i < 4; i++) code += cs[Math.floor(Math.random() * cs.length)];
+      $("room").value = code;
+      Net.join(code, $("nick").value);
+    });
+    $("mpLeave").addEventListener("click", function (e) { e.stopPropagation(); Net.leave(); });
+    ["room", "nick"].forEach(function (id) {
+      $(id).addEventListener("keydown", function (e) {
+        e.stopPropagation();
+        if (e.key === "Enter") Net.join($("room").value, $("nick").value);
+      });
+    });
+  })();
+
+  /* ==================================================================
+     10. 主循环
+     ================================================================== */
+  var vel = new THREE.Vector3();
+  var clock = new THREE.Clock();
+  var player = new THREE.Vector3(0, 1.7, MAP.spawnZ);
+  var PR = 0.62;   // 玩家碰撞半径
+
+  /* 开火 / 后坐力 / 换弹 / 持枪显示：步行与车载共用（车上只能用车载手枪，但流程完全一致） */
+  function updateGunplay(dt, now) {
+    if (firing && pointerLocked) {
+      if (WPN[cur].auto) tryShoot(now);
+      else if (!WPN[cur]._firedThisClick) { tryShoot(now); WPN[cur]._firedThisClick = true; }
+    }
+    // 松开扳机时重置「本次点击已开火」——必须遍历所有武器，
+    // 之前只写了 ar/sniper，导致 RPG（单发）打完一发后标记永远清不掉、再也打不出第二发
+    if (!firing) { for (var wk in WPN) WPN[wk]._firedThisClick = false; }
+
+    recoilKick += (0 - recoilKick) * 0.18;
+    muzzle.intensity += (0 - muzzle.intensity) * 0.25;
+    flash.material.opacity += (0 - flash.material.opacity) * 0.3;
+
+    // 换弹 + 进度条
+    if (reloading) {
+      reloadT -= dt;
+      var pct = Math.max(0, Math.min(1, 1 - reloadT / reloadTotal));
+      $("reloadbar").firstElementChild.style.width = (pct * 100).toFixed(1) + "%";
+      if (reloadT <= 0) {
+        reloading = false; ammo = WPN[cur].mag;
+        setRocketLoaded(true);                    // 装填完成 → 筒口重新出现弹头
+        $("ammo").classList.remove("reloading");
+        $("reloadbar").classList.remove("on");
+        $("reloadbar").firstElementChild.style.width = "0%";
+        updateHud();
+      }
+    }
+
+    setWeaponPos();
+
+    // 开镜时枪正好堵在镜筒中央 —— 必须隐藏枪身，只留 CSS 镜筒画面
+    var scoped = aiming && WPN[cur].scope;
+    weaponHolder.visible = !scoped && !dead;
+    $("scope").style.display = (scoped && !driving) ? "block" : "none";
+    $("crosshair").style.opacity = (scoped || dead) ? 0 : 0.9;   // 车上保留准星，方便探头射击
+  }
+
+  function update(dt, now) {
+    if (pausedStick) return;             // 摇杆模式暂停：整个游戏逻辑冻结
+    // 火箭弹 / 爆炸要在「倒地早退」之前跑，否则死亡时飞行物会僵在半空
+    updateRockets(dt);
+    updateBlasts(dt);
+    updateTraffic(dt);                 // 背景车流一直跑，与玩家是否在车上无关
+    updateFx(dt);                      // 抛壳 / 曳光 / 火花：必须早于下面的早退，否则开车开枪时它们会冻结在半空
+
+    if (dead) {
+      // 倒地：相机压低，不能开火与移动；仍要上报状态，否则会被其他玩家超时清理
+      camera.position.set(player.x, 0.75, player.z);
+      camera.rotation.y = yaw; camera.rotation.x = pitch;
+      weaponHolder.visible = false;
+      $("scope").style.display = "none";
+      $("crosshair").style.opacity = 0;
+      Net.tick(now);
+      return;
+    }
+
+    if (driving) {                       // 驾驶中：车辆物理 + 车载手枪射击，跳过人物移动
+      updateDriving(dt);
+      if (!driving) return;              // 车炸了：driving 已清空，本帧到此为止
+      updateGunplay(dt, now);
+      Net.tick(now);
+      return;
+    }
+
+    var fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    var right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    var acc = new THREE.Vector3();
+    var moveScale = 1;
+    if (isStick()) {
+      // 摇杆是模拟量：轻推慢走，推满才是全速
+      var jm = Math.hypot(JOY.mx, JOY.my);
+      if (jm > 0.02) {
+        moveScale = Math.min(1, jm);
+        acc.addScaledVector(fwd, JOY.my / jm).addScaledVector(right, JOY.mx / jm);
+      }
+      moving = jm > 0.02;
+    } else {
+      if (keys["KeyW"]) acc.add(fwd);
+      if (keys["KeyS"]) acc.sub(fwd);
+      if (keys["KeyD"]) acc.add(right);
+      if (keys["KeyA"]) acc.sub(right);
+      moving = acc.lengthSq() > 0;
+    }
+
+    /* GTA V 式跑步：按住 WASD 的同时按住 Shift → 快速移动（蹲下/开镜时不触发） */
+    sprinting = moving && (isStick() ? moveScale > 0.92 : shiftDown()) && !aiming && !crouching && onGround;
+    var speed;
+    if (aiming) speed = SPD_AIM;            // 开镜：最慢
+    else if (sprinting) speed = SPD_SPRINT; // 跑步：最快
+    else if (crouching) speed = SPD_CROUCH; // 蹲下：潜行慢速
+    else speed = SPD_WALK;                  // 步行
+    if (moving) acc.normalize().multiplyScalar(speed * moveScale);
+    // 空中保留惯性：地面响应快，空中几乎不改向
+    vel.lerp(acc, onGround ? 0.2 : 0.06);
+    player.addScaledVector(vel, dt);
+
+    /* 垂直：跳跃 + 蹲下/站起的眼高过渡 */
+    var groundY = crouching ? EYE_CROUCH : EYE_STAND;
+    if (onGround) {
+      player.y += (groundY - player.y) * Math.min(1, dt * 12);   // 平滑起身/下蹲
+      if (Math.abs(player.y - groundY) < 0.002) player.y = groundY;
+      vy = 0;
+    } else {
+      vy -= GRAVITY * dt;
+      player.y += vy * dt;
+      if (player.y <= groundY) { player.y = groundY; vy = 0; onGround = true; }
+    }
+
+    // 边界
+    var H = MAP.half;
+    player.x = Math.max(-H, Math.min(H, player.x));
+    player.z = Math.max(-H, Math.min(H, player.z));
+
+    // 碰撞：建筑 + 掩体统一处理，矮掩体同样挡人（这样才能当掩体绕行）
+    for (var i = 0; i < colliders.length; i++) {
+      var b = colliders[i].box;
+      if (player.x > b.min.x - PR && player.x < b.max.x + PR &&
+          player.z > b.min.z - PR && player.z < b.max.z + PR) {
+        var dl = player.x - (b.min.x - PR), dr = (b.max.x + PR) - player.x;
+        var db = player.z - (b.min.z - PR), df = (b.max.z + PR) - player.z;
+        var m = Math.min(dl, dr, db, df);
+        if (m === dl) player.x = b.min.x - PR;
+        else if (m === dr) player.x = b.max.x + PR;
+        else if (m === db) player.z = b.min.z - PR;
+        else player.z = b.max.z + PR;
+      }
+    }
+
+    camera.position.copy(player);
+    camera.rotation.y = yaw; camera.rotation.x = pitch;
+    // 跑步时轻微拉高 FOV，做出 GTA V 那种「加速感」
+    var fovTarget = aiming ? WPN[cur].adsFov : (BASE_FOV + (sprinting ? 7 : 0));
+    camera.fov += (fovTarget - camera.fov) * 0.2;
+    camera.updateProjectionMatrix();
+
+    if (moving) bobT += dt * (sprinting ? 15 : 10);
+
+    updateGunplay(dt, now);
+
+    // 靠近停着的车时给个上车提示
+    if (!driving) {
+      var near = nearestCar();
+      if (near) { $("carhud").textContent = "按 F 上车"; $("carhud").classList.add("on"); }
+      else $("carhud").classList.remove("on");
+    }
+
+    // 敌人：巡逻 / 交战 AI（自由与挑战通用）
+    var respawnDelay = mode === "challenge" ? RESPAWN.challenge : RESPAWN.free;
+    for (var k = 0; k < targets.length; k++) {
+      var tg = targets[k];
+      if (!tg.userData.alive) {
+        tg.userData.deadT += dt;
+        tg.rotation.x = Math.min(Math.PI / 2, tg.userData.deadT * 3.2);
+        tg.position.y = -tg.userData.deadT * 1.5;
+        if (tg.userData.deadT > respawnDelay) { tg.rotation.x = 0; tg.position.y = 0; spawnTarget(tg); }
+        continue;
+      }
+
+      // 受击红闪衰减
+      if (tg.userData.hitFlash > 0) {
+        tg.userData.hitFlash -= dt;
+        var hf = Math.max(0, tg.userData.hitFlash / 0.14);
+        tg.userData.head.material.emissive.setRGB(hf * 0.8, hf * 0.06, hf * 0.06);
+        tg.userData.torso.material.emissive.setRGB(hf * 0.8, hf * 0.06, hf * 0.06);
+      }
+
+      var edx = player.x - tg.position.x, edz = player.z - tg.position.z;
+      var edist = Math.hypot(edx, edz) || 0.0001;
+
+      if (edist < ENEMY_DETECT) {
+        // 交战：面向玩家，保持距离并横向走位
+        tg.userData.state = "engage";
+        tg.rotation.y = Math.atan2(edx, edz);
+        tg.userData.strafeCd -= dt;
+        if (tg.userData.strafeCd <= 0) { tg.userData.strafe = Math.random() < 0.5 ? -1 : 1; tg.userData.strafeCd = 0.7 + Math.random() * 1.5; }
+        var esp = 0;
+        if (edist > ENEMY_KEEP + 3) esp = ENEMY_SPD;
+        else if (edist < ENEMY_KEEP - 3) esp = -ENEMY_SPD * 0.8;
+        var efx = edx / edist, efz = edz / edist;
+        var esx = -efz * tg.userData.strafe, esz = efx * tg.userData.strafe;
+        var ewx = efx * esp + esx * ENEMY_SPD * 0.7, ewz = efz * esp + esz * ENEMY_SPD * 0.7;
+        var enx = tg.position.x + ewx * dt, enz = tg.position.z + ewz * dt;
+        if (spotFree(enx, enz) && Math.abs(enx) < ENEMY_BOUND && Math.abs(enz) < ENEMY_BOUND) { tg.position.x = enx; tg.position.z = enz; }
+
+        // 开火
+        tg.userData.fireCd -= dt;
+        if (edist < ENEMY_FIRE_RANGE && tg.userData.fireCd <= 0) {
+          tg.userData.fireCd = ENEMY_FIRE_MIN + Math.random() * (ENEMY_FIRE_MAX - ENEMY_FIRE_MIN);
+          enemyFire(tg, edist);
+        }
+      } else {
+        // 巡逻：缓慢游走
+        tg.userData.state = "patrol";
+        tg.userData.dir += (Math.random() - 0.5) * dt * 0.8;
+        var pnx = tg.position.x + Math.sin(tg.userData.dir) * tg.userData.patrol * dt;
+        var pnz = tg.position.z + Math.cos(tg.userData.dir) * tg.userData.patrol * dt;
+        if (spotFree(pnx, pnz) && Math.abs(pnx) < ENEMY_BOUND && Math.abs(pnz) < ENEMY_BOUND) { tg.position.x = pnx; tg.position.z = pnz; }
+        else tg.userData.dir += Math.PI * (0.5 + Math.random() * 0.5);
+        tg.rotation.y = tg.userData.dir;
+      }
+    }
+
+    // 挑战模式计时
+    if (mode === "challenge" && challenge.running) {
+      challenge.t -= dt;
+      var tl = Math.max(0, Math.ceil(challenge.t));
+      $("timeleft").textContent = tl;
+      $("timer").classList.toggle("urgent", tl <= 10);
+      if (challenge.t <= 0) endChallenge();
+    }
+
+    Net.tick(now);
+  }
+
+  /* ==================================================================
+     10.5 排行榜（60 秒挑战）
+     静态站没有后端，用 MQTT 的「保留消息」当共享存储：
+     连上 broker 就能收到当前榜单，打完一局若进前 10 就合并后重新发布（retain）。
+     拿不到中继时自动退化成本机榜（localStorage），不影响使用。
+     ================================================================== */
+  var BOARD_TOPIC = "cityrange/_board_v1";
+  var BOARD_LS = "cityrange.board.local";
+  var LB = { list: [], local: [], me: "", ip: "", ready: false, offline: false, client: null };
+
+  function escB(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  // 公开博客不适合暴露完整 IP，末段打码（IPv6 只留前三段）
+  function maskIp(ip) {
+    if (!ip) return "未知玩家";
+    if (ip.indexOf(":") >= 0) {                      // IPv6：只留前三段
+      var g = ip.split(":").filter(function (s) { return s !== ""; });
+      return g.slice(0, 3).join(":") + "::*";
+    }
+    var p = ip.split(".");
+    if (p.length !== 4) return String(ip).slice(0, 14);
+    return p[0] + "." + p[1] + "." + p[2] + ".*";
+  }
+  // 多源兜底：JSON 接口 + 纯文本接口，国内网络也能拿到；单个源 5 秒超时就换下一个
+  function fetchIp(cb) {
+    var urls = [
+      ["https://api.ipify.org?format=json", "json"],
+      ["https://ipinfo.io/json", "json"],
+      ["https://api.ip.sb/ip", "text"],
+      ["https://myip.ipip.net", "text"],
+      ["https://ip.3322.net", "text"]
+    ];
+    var i = 0;
+    (function next() {
+      if (i >= urls.length) { cb(""); return; }
+      var u = urls[i++];
+      var ac = (typeof AbortController !== "undefined") ? new AbortController() : null;
+      var tid = ac ? setTimeout(function () { try { ac.abort(); } catch (e) {} }, 5000) : null;
+      fetch(u[0], { cache: "no-store", signal: ac ? ac.signal : undefined })
+        .then(function (r) { return u[1] === "json" ? r.json() : r.text(); })
+        .then(function (d) {
+          if (tid) clearTimeout(tid);
+          var ip = "";
+          if (typeof d === "string") { var m = d.match(/\d{1,3}(?:\.\d{1,3}){3}/); ip = m ? m[0] : ""; }
+          else if (d && d.ip) ip = d.ip;
+          if (ip) cb(ip); else next();
+        })
+        .catch(function () { if (tid) clearTimeout(tid); next(); });
+    })();
+  }
+  function cmpEntry(a, b) {
+    return (b.hits - a.hits) || ((b.rate || 0) - (a.rate || 0)) || ((a.t || 0) - (b.t || 0));
+  }
+  function mergeBoard(list, e) {
+    for (var i = 0; i < list.length; i++) {          // 同名只保留更好的那次
+      if (list[i].n === e.n) {
+        if (e.hits > list[i].hits) list[i] = e;
+        return list.sort(cmpEntry);
+      }
+    }
+    list.push(e);
+    return list.sort(cmpEntry);
+  }
+  function boardRows(list) {
+    if (!list || !list.length) return '<div class="bempty">暂无成绩<br>打完一次 60 秒挑战即可上榜</div>';
+    var h = "";
+    for (var i = 0; i < list.length; i++) {
+      var e = list[i], me = LB.me && e.n === LB.me;
+      h += '<div class="brow' + (me ? " me" : "") + '">' +
+        '<span class="rk">' + (i + 1) + "</span>" +
+        '<span class="nm">' + escB(e.n) + "</span>" +
+        '<span class="ht">' + (e.hits || 0) + "</span>" +
+        '<span class="ac">' + (e.acc || 0) + "%</span></div>";
+    }
+    return h;
+  }
+  function renderBoard() {
+    var list = (LB.list && LB.list.length) ? LB.list : LB.local;
+    var html = boardRows(list);
+    var a = $("boardList"), b = $("rboardList");
+    if (a) a.innerHTML = html;
+    if (b) b.innerHTML = html;
+    var tip = $("boardTip");
+    if (tip) tip.textContent = LB.offline
+      ? "离线模式：MQTT 中继不可用，仅显示本机成绩"
+      : ("你的名字：" + (LB.me || "获取中…") + " · 榜单经 MQTT 公共中继同步");
+  }
+  function boardFallback() {
+    LB.offline = true;
+    LB.list = (LB.local || []).slice(0, 10);
+    renderBoard();
+  }
+  function boardSubmit(entry) {
+    entry.n = LB.me || "未知玩家";
+    entry.t = Date.now();
+    LB.local = LB.local || [];
+    LB.local.push(entry);
+    LB.local.sort(cmpEntry);
+    LB.local = LB.local.slice(0, 10);
+    try { localStorage.setItem(BOARD_LS, JSON.stringify(LB.local)); } catch (e) {}
+
+    if (!LB.offline && LB.client) {
+      LB.list = mergeBoard(LB.list.slice(), entry).slice(0, 10);
+      try { LB.client.publish(BOARD_TOPIC, JSON.stringify(LB.list), { qos: 0, retain: true }); } catch (e) {}
+    } else {
+      LB.list = LB.local.slice(0, 10);
+    }
+    renderBoard();
+    for (var i = 0; i < LB.list.length; i++) if (LB.list[i] === entry) return i + 1;
+    return 0;                                        // 0 = 没挤进榜（通常是没超过自己此前最好成绩）
+  }
+  function boardInit() {
+    try { LB.local = JSON.parse(localStorage.getItem(BOARD_LS) || "[]"); } catch (e) { LB.local = []; }
+    renderBoard();
+    fetchIp(function (ip) { LB.ip = ip; LB.me = maskIp(ip); renderBoard(); });
+    if (!Net || !Net.loadMqtt) { boardFallback(); return; }
+    Net.loadMqtt(function (ok) {
+      if (!ok) { boardFallback(); return; }
+      var boardOpts = {
+        clientId: "csr_board_" + Math.random().toString(36).slice(2, 8),
+        keepalive: 30, clean: true, reconnectPeriod: 3000, connectTimeout: 9000
+      };
+      Net.connectMqtt(boardOpts, function (cl) {
+        if (!cl) { boardFallback(); return; }
+        LB.client = cl;
+        LB.client.on("connect", function () { LB.client.subscribe(BOARD_TOPIC, { qos: 0 }, function () {}); });
+        LB.client.on("message", function (tp, payload) {
+          try {
+            var arr = JSON.parse(payload.toString());
+            if (Object.prototype.toString.call(arr) === "[object Array]") {
+              LB.list = arr.slice(0, 10); LB.ready = true; renderBoard();
+            }
+          } catch (e) {}
+        });
+      });
+      // 全部中继都连不上才降级（给足多中继依次尝试的时间）
+      setTimeout(function () { if (!LB.ready) boardFallback(); }, 22000);
+    });
+  }
+
+  /* ==================================================================
+     11. 枪械模型：全部程序化生成（下面第 3 节 buildAR/buildSniper/buildRPG/buildAUG）
+     ------------------------------------------------------------------
+     之前这里会异步加载 assets/models/*.bin（外部减面模型），已移除：
+     那批模型的来源无法确权，手搓的方块枪本来就与整体低多边形风格一致，
+     而且不依赖任何外部资源、离线也能玩、省掉 3 个文件的下载。
+     ================================================================== */
+
+  boardInit();          // 拉取 IP 生成名字 + 连接榜单中继
+
+  function animate() {
+    requestAnimationFrame(animate);
+    var dt = Math.min(clock.getDelta(), 0.05);
+    var now = performance.now() / 1000;
+    if (started) update(dt, now);
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener("resize", function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // 返回博客
+  var back = document.createElement("a");
+  back.addEventListener("click", function () { leaving = true; });
+  back.href = "/"; back.textContent = "← 返回博客";
+  back.style.cssText = "position:fixed;top:14px;left:16px;z-index:30;color:#cfe3f5;text-decoration:none;font-size:14px;background:rgba(10,14,20,.55);padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.15);";
+  document.body.appendChild(back);
+
+  setTargetCount(MAX_TARGETS.free);
+  updateHud(); updateAcc(); updateHp();
+})();
+</script>
+</body>
+</html>

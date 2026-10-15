@@ -1,0 +1,61 @@
+.sl-card {
+  border: 1px solid rgba(127,127,127,.22);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin: 14px 0 18px;
+  background: rgba(127,127,127,.08);
+}
+.sl-card h3 { margin: 0 0 10px; font-size: 15px; }
+.sl-card ul { margin: 0; padding-left: 20px; }
+.sl-card li { margin: 4px 0; line-height: 1.75; }
+.sl-note { margin: 10px 0 0; font-size: 12.5px; opacity: .7; line-height: 1.7; }
+
+.sl-row { display: flex; align-items: center; gap: 12px; margin: 10px 0; flex-wrap: wrap; }
+.sl-row label {
+  flex: 0 0 92px; font-size: 13px; opacity: .85; text-align: right;
+}
+.sl-row label em { color: #e8443a; font-style: normal; }
+.sl-row input {
+  flex: 1 1 240px; min-width: 180px;
+  padding: 9px 12px; border-radius: 9px;
+  border: 1px solid rgba(127,127,127,.3);
+  background: rgba(127,127,127,.08);
+  color: inherit; font: inherit; font-size: 13.5px;
+}
+.sl-row input:focus { outline: none; border-color: rgba(76,167,255,.7); }
+
+.sl-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.sl-btn {
+  cursor: pointer; font: inherit; font-size: 14px; font-weight: 700;
+  padding: 10px 20px; border-radius: 10px; color: inherit;
+  border: 1px solid rgba(76,167,255,.45); background: rgba(76,167,255,.18);
+}
+.sl-btn:hover { background: rgba(76,167,255,.32); }
+.sl-btn.ghost { background: rgba(127,127,127,.12); border-color: rgba(127,127,127,.3); font-weight: 400; }
+.sl-btn.ghost:hover { background: rgba(127,127,127,.24); }
+.sl-link { font-size: 13px; opacity: .7; }
+
+.sl-tip { margin: 12px 0 0; font-size: 13px; min-height: 20px; line-height: 1.6; }
+.sl-tip.ok { color: #35b06a; }
+.sl-tip.bad { color: #e8443a; }
+
+/* 兜底：GitHub 若把预填内容拦在模板选择页后面，访客可以直接复制正文 */
+.sl-fallback { margin-top: 14px; border-top: 1px solid rgba(127,127,127,.22); padding-top: 12px; }
+.sl-fallback summary {
+  cursor: pointer; font-size: 12.5px; opacity: .68; line-height: 1.7;
+}
+.sl-fallback summary:hover { opacity: .95; }
+.sl-fb-note { margin: 10px 0 8px; font-size: 12.5px; opacity: .68; line-height: 1.7; }
+.sl-fallback textarea {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  font: 12px/1.7 "Consolas", ui-monospace, monospace;
+  color: var(--color-font-1);
+  background: rgba(127,127,127,.08);
+  border: 1px solid rgba(127,127,127,.28); border-radius: 8px;
+  padding: 10px 12px;
+}
+.sl-copytip { font-size: 12px; margin-left: 10px; color: #35b06a; }
+
+@media (max-width: 560px) {
+  .sl-row label { flex-basis: 100%; text-align: left; }
+}

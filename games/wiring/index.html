@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>汽车喇叭接线模拟器 · Horn Wiring Sim</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #12151b;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    overscroll-behavior: none; touch-action: none;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  #app { position: fixed; inset: 0; display: flex; }
+  canvas { display: block; margin: auto; touch-action: none; -webkit-user-drag: none; }
+
+  /* 顶部工具条 */
+  #bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 12px; background: linear-gradient(180deg, rgba(10,13,18,.92), rgba(10,13,18,.55) 70%, transparent);
+  }
+  #bar .brand { font-size: 13px; font-weight: 800; letter-spacing: 1px; color: #e8eef6; margin-right: auto; }
+  #bar .brand small { display: block; font-size: 10px; font-weight: 400; opacity: .5; letter-spacing: 0; }
+  .btn {
+    cursor: pointer; font: inherit; font-size: 12px; font-weight: 700;
+    padding: 7px 13px; border-radius: 999px; color: #dfe8f2;
+    border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.07);
+    transition: background .15s, border-color .15s, transform .1s;
+  }
+  .btn:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.34); }
+  .btn:active { transform: translateY(1px); }
+  .btn.pri { background: rgba(232,68,58,.22); border-color: rgba(232,68,58,.6); color: #ffd9d4; }
+  .btn.pri:hover { background: rgba(232,68,58,.34); }
+  .btn.on { background: rgba(53,176,106,.22); border-color: rgba(53,176,106,.65); color: #c8f5db; }
+
+  /* 底部提示 */
+  #tip {
+    position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 10;
+    font-size: 12px; color: #cfdae6; background: rgba(10,13,18,.72);
+    border: 1px solid rgba(255,255,255,.13); border-radius: 999px; padding: 6px 16px;
+    white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* 开始 / 完成遮罩 */
+  #ov {
+    position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; overflow-y: auto;
+    background: rgba(6,9,13,.93); color: #eaf1f8; text-align: center; padding: 24px;
+  }
+  #ov.hidden { display: none; }
+  #ov h1 { font-size: 27px; letter-spacing: 2px; }
+  #ov .lead { font-size: 13px; line-height: 1.8; opacity: .8; max-width: 620px; }
+  #ov .lead b { color: #ffd45b; }
+  #ov .card {
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 14px 18px; font-size: 12.5px; line-height: 1.9; text-align: left;
+  }
+  #ov .card i { color: #7fd1ff; font-style: normal; font-weight: 700; }
+  #ov button { margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="app"><canvas id="cv"></canvas></div>
+
+<div id="bar">
+  <div class="brand">汽车喇叭接线模拟器<small>HORN WIRING SIMULATOR</small></div>
+  <button class="btn pri" id="bHonk">📢 按住鸣笛</button>
+  <button class="btn" id="bAuto">连续鸣笛</button>
+  <button class="btn" id="bHint">提示</button>
+  <button class="btn" id="bDemo">看演示</button>
+  <button class="btn" id="bClear">拆掉全部线</button>
+</div>
+
+<div id="tip">从接线柱拖到另一个接线柱即可连线 · 点线身可拆掉该线</div>
+
+<div id="ov">
+  <h1>汽车喇叭接线模拟器</h1>
+  <div class="lead">
+    仿照实拍演示：<b>蓄电池</b> → <b>4 脚继电器</b> → <b>喇叭</b>，中间用按钮控制。<br>
+    电路是<b>真实求解</b>的（节点分析），只要物理上能通电，喇叭就会响 —— 不限于下面这一种接法。
+  </div>
+  <div class="card">
+    <div style="opacity:.62;margin-bottom:7px;">标准接法 · 实拍里那种（6 根线）</div>
+    <div>① 蓄电池 <i>+</i> → 继电器 <i>30</i>　（触点公共端，走大电流）</div>
+    <div>② 继电器 <i>87</i> → 喇叭 <i>+</i>　（常开输出，吸合后才通电）</div>
+    <div>③ 喇叭 <i>−</i> → 蓄电池 <i>−</i>　（搭铁回路）</div>
+    <div>④ 蓄电池 <i>+</i> → 按钮 <i>1</i>　（控制正电）</div>
+    <div>⑤ 按钮 <i>2</i> → 继电器 <i>85</i>　（线圈一端）</div>
+    <div>⑥ 继电器 <i>86</i> → 蓄电池 <i>−</i>　（线圈另一端搭铁）</div>
+    <div style="opacity:.62;margin:10px 0 7px;">其他也能响的接法（自己试着接）</div>
+    <div>· 电池 <i>+</i> 直接接喇叭 <i>+</i>、喇叭 <i>−</i> 接电池 <i>−</i> → <b>绕过继电器，一直响</b></div>
+    <div>· 正负极接反 → 照样响（直流喇叭不分极性）</div>
+    <div>· 按钮直接串在喇叭回路 → 也能响，但 7 A 全走按钮，真车会烧</div>
+    <div>· 喇叭和线圈串在一起 → <b>不响</b>（只剩 0.15 A，不够起振）</div>
+    <div>· 让触点给自己的线圈供电 → 按一下就能<b>自锁</b>，松手继续响</div>
+  </div>
+  <div class="lead" style="opacity:.55;font-size:12px;">
+    注意：<b>电池正负极之间只剩导线就会短路</b>（实测约 146 A）。屏幕上会显示实时电压与各支路电流。
+  </div>
+  <button class="btn pri" id="bStart" style="font-size:15px;padding:12px 34px;">点击开始</button>
+</div>
+
+<script>
+"use strict";
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ================================================================
+     1. 布局与接线柱（逻辑坐标系 1000 × 620，自动缩放适配窗口）
+     ================================================================ */
+  var W = 1000, H = 620;
+
+  var TERMS = {
+    BAT_P:  { x: 130, y: 104, t: "+",  kind: "pos",   name: "蓄电池正极" },
+    BAT_N:  { x: 216, y: 104, t: "−",  kind: "neg",   name: "蓄电池负极" },
+    R30:    { x: 404, y: 268, t: "30", kind: "relay", name: "继电器 30 · 触点公共端" },
+    R87:    { x: 458, y: 268, t: "87", kind: "relay", name: "继电器 87 · 常开输出" },
+    R85:    { x: 512, y: 268, t: "85", kind: "relay", name: "继电器 85 · 线圈" },
+    R86:    { x: 566, y: 268, t: "86", kind: "relay", name: "继电器 86 · 线圈" },
+    BTN_A:  { x: 712, y: 268, t: "1",  kind: "btn",   name: "按钮 1" },
+    BTN_B:  { x: 856, y: 268, t: "2",  kind: "btn",   name: "按钮 2" },
+    HORN_P: { x: 424, y: 372, t: "+",  kind: "pos",   name: "喇叭正极" },
+    HORN_N: { x: 540, y: 372, t: "−",  kind: "neg",   name: "喇叭负极" }
+  };
+  var KEYS = Object.keys(TERMS);
+
+  /* 正确接法（无序对） */
+  var NEEDED = [
+    ["BAT_P", "R30",  "电池 + → 继电器 30"],
+    ["R87", "HORN_P", "继电器 87 → 喇叭 +"],
+    ["HORN_N", "BAT_N", "喇叭 − → 电池 −"],
+    ["BAT_P", "BTN_A", "电池 + → 按钮 1"],
+    ["BTN_B", "R85",  "按钮 2 → 继电器 85"],
+    ["R86", "BAT_N",  "继电器 86 → 电池 −"]
+  ];
+
+  /* ================================================================
+     2. 状态
+     ================================================================ */
+  var wires = [];              // { a, b, color, born }
+  var drag = null;             // { from, x, y }
+  var hover = null;            // 悬停的接线柱
+  var hoverWire = -1;
+  var btnDown = false;         // 喇叭按钮是否按下
+  var autoHonk = false;        // 连续鸣笛
+  var autoT = 0;
+  var started = false;
+  var sparks = [];
+  var waves = [];              // 喇叭声波
+  var time = 0;
+  var db = 34, dbTarget = 34, dbPeak = 34;
+  var relayLatch = false, relayT = 0;   // 继电器吸合动画
+  var relayState = false;               // 触点真实状态（物理量，跨帧保持 → 支持自锁）
+  var clackWarned = false;              // 「继电器吸合但喇叭不响」提示是否已说过
+  var btnWarned = false;                // 「电流全走按钮」提示是否已说过
+  var hornOn = false;
+  var hintIdx = -1;
+  var hintT = 0;
+  var demoT = -1, demoStep = 0;
+  var toastMsg = "", toastT = 0;
+
+  var COL = ["#e8c02a", "#2f7fd8", "#d84f9e", "#35b06a"];   // 信号线配色（黄/蓝/粉/绿）
+  var colIdx = 0;
+
+  /* ================================================================
+     3. 音效：喇叭用实拍「纯净版」mp3（7.34 秒长鸣，循环播放）
+     ================================================================ */
+  var actx = null, hornBuf = null, hornSrc = null, hornGain = null;
+  var VOL = 0.98;              // 喇叭音量（原始音频已归一化到 RMS 0.78，按用户要求几乎原音输出）
+
+  function audio() {
+    if (actx) return actx;
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+    return actx;
+  }
+  function loadHorn() {
+    if (!audio()) return;
+    fetch("assets/horn.mp3").then(function (r) { return r.arrayBuffer(); }).then(function (b) {
+      return new Promise(function (res, rej) { actx.decodeAudioData(b, res, rej); });
+    }).then(function (d) { hornBuf = d; }).catch(function () {});
+  }
+  function honkStart() {
+    if (!actx || hornSrc) return;
+    hornGain = actx.createGain();
+    hornGain.gain.value = 0;
+    hornGain.connect(actx.destination);
+    hornSrc = { buf: null, osc: [] };
+    if (hornBuf) {
+      var s = actx.createBufferSource();
+      s.buffer = hornBuf;
+      s.loop = true;                           // 7.34 秒全程无间断，循环听不出接头
+      s.connect(hornGain); s.start();
+      hornSrc.buf = s;
+    } else {
+      // 兜底：mp3 没加载出来时用双振荡器合成一个喇叭音，保证不会没声音
+      [418, 527].forEach(function (f) {
+        var o = actx.createOscillator(); o.type = "sawtooth"; o.frequency.value = f;
+        var g = actx.createGain(); g.gain.value = 0.30;
+        o.connect(g); g.connect(hornGain); o.start();
+        hornSrc.osc.push(o);
+      });
+    }
+    hornGain.gain.linearRampToValueAtTime(VOL, actx.currentTime + 0.04);
+  }
+  function honkStop() {
+    if (!hornSrc) return;
+    var h = hornSrc, g = hornGain;
+    hornSrc = null; hornGain = null;
+    var t = actx.currentTime;
+    try {
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(g.gain.value, t);
+      g.gain.linearRampToValueAtTime(0, t + 0.07);
+    } catch (e) {}
+    setTimeout(function () {
+      try { if (h.buf) h.buf.stop(); } catch (e) {}
+      h.osc.forEach(function (o) { try { o.stop(); } catch (e) {} });
+    }, 140);
+  }
+  function noiseBuf(dur) {
+    var n = Math.max(1, Math.floor(actx.sampleRate * dur));
+    var b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  }
+  function sfxClick(on) {                      // 继电器吸合 / 释放
+    if (!audio() || !actx) return; var t = actx.currentTime;
+    var src = actx.createBufferSource(); src.buffer = noiseBuf(0.03);
+    var f = actx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = on ? 2100 : 1500;
+    var g = actx.createGain(); g.gain.setValueAtTime(0.28, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+    src.connect(f); f.connect(g); g.connect(actx.destination); src.start(t); src.stop(t + 0.05);
+  }
+  function sfxSpark() {                        // 短路打火
+    if (!audio() || !actx) return; var t = actx.currentTime;
+    var src = actx.createBufferSource(); src.buffer = noiseBuf(0.35);
+    var f = actx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 1400;
+    var g = actx.createGain(); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    src.connect(f); f.connect(g); g.connect(actx.destination); src.start(t); src.stop(t + 0.35);
+  }
+  function sfxWire() {                         // 插接线的「啪」声
+    if (!audio() || !actx) return; var t = actx.currentTime;
+    var o = actx.createOscillator(); o.type = "triangle";
+    o.frequency.setValueAtTime(520, t); o.frequency.exponentialRampToValueAtTime(180, t + 0.06);
+    var g = actx.createGain(); g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.09);
+  }
+
+  /* ================================================================
+     4. 电路求解器 —— 真实节点分析（MNA）
+
+     这里不判断"哪几根线接对了"，而是把整个回路当成一组电阻网络，
+     用改进节点分析法解出每个节点的电压，再算出每条支路的真实电流。
+     好处：任何物理上能通的接法都会响，不限于那 6 根标准线。
+
+     元件模型（电气参数贴近真车）：
+       蓄电池  12 V，内阻 0.08 Ω
+       喇叭    等效电阻 1.6 Ω（接 12 V 时约 7.5 A 起振）
+       线圈    80 Ω（12 V / 150 mA），电流 > 35 mA 判为吸合
+       触点    R30↔R87 常开，线圈吸合才闭合
+       按钮    BTN_A↔BTN_B 按下才闭合
+       导线    每根 2 mΩ
+     ================================================================ */
+  var NIDX = {};
+  KEYS.forEach(function (k, i) { NIDX[k] = i; });
+
+  var VBAT = 12, R_INT = 0.08, R_WIRE = 0.002,
+      R_HORN = 1.6, R_COIL = 80, R_SW = 0.02, R_OPEN = 1e7, LEAK = 1e-7;
+
+  var I_HORN_ON = 3.0;     // 喇叭起振电流：低于它不响（串上线圈就达不到了）
+  var I_COIL_ON = 0.035;   // 线圈吸合电流
+  var I_SHORT   = 30;      // 短路判定（正常鸣笛约 7.5 A）
+  var I_BTN_MAX = 2.0;     // 按钮额定电流：超了在真车里就是烧按钮
+
+  function has(a, b) {
+    for (var i = 0; i < wires.length; i++) {
+      var w = wires[i];
+      if ((w.a === a && w.b === b) || (w.a === b && w.b === a)) return true;
+    }
+    return false;
+  }
+  function allDone() {
+    for (var i = 0; i < NEEDED.length; i++) if (!has(NEEDED[i][0], NEEDED[i][1])) return false;
+    return true;
+  }
+
+  /* 高斯消元（列主元）——解 n 元线性方程组 */
+  function gauss(A, b) {
+    var n = b.length, i, j, k, M = [];
+    for (i = 0; i < n; i++) M.push(A[i].concat([b[i]]));
+    for (i = 0; i < n; i++) {
+      var p = i;
+      for (k = i + 1; k < n; k++) if (Math.abs(M[k][i]) > Math.abs(M[p][i])) p = k;
+      if (Math.abs(M[p][i]) < 1e-12) return null;
+      if (p !== i) { var t = M[i]; M[i] = M[p]; M[p] = t; }
+      for (k = i + 1; k < n; k++) {
+        var f = M[k][i] / M[i][i];
+        if (!f) continue;
+        for (j = i; j <= n; j++) M[k][j] -= f * M[i][j];
+      }
+    }
+    var x = new Array(n);
+    for (i = n - 1; i >= 0; i--) {
+      var s = M[i][n];
+      for (j = i + 1; j < n; j++) s -= M[i][j] * x[j];
+      x[i] = s / M[i][i];
+    }
+    return x;
+  }
+
+  /* 解一次电网：contactClosed = 继电器触点当前是否闭合 */
+  function solveCircuit(contactClosed) {
+    var n = KEYS.length, i, j, k, G = [], B = [];
+    for (i = 0; i < n; i++) {
+      var row = new Array(n);
+      for (j = 0; j < n; j++) row[j] = 0;
+      G.push(row); B.push(0);
+    }
+    function addR(a, b, r) {                    // 一个电阻
+      var g = 1 / r, x = NIDX[a], y = NIDX[b];
+      G[x][x] += g; G[y][y] += g; G[x][y] -= g; G[y][x] -= g;
+    }
+    function addSrc(a, b, v, r) {               // 电压源 → 诺顿等效（并联电流源）
+      var g = 1 / r, x = NIDX[a], y = NIDX[b];
+      G[x][x] += g; G[y][y] += g; G[x][y] -= g; G[y][x] -= g;
+      B[x] += v * g; B[y] -= v * g;
+    }
+
+    addSrc("BAT_P", "BAT_N", VBAT, R_INT);                  // 蓄电池
+    addR("HORN_P", "HORN_N", R_HORN);                       // 喇叭
+    addR("R85", "R86", R_COIL);                             // 继电器线圈
+    addR("R30", "R87", contactClosed ? R_SW : R_OPEN);      // 触点（常开）
+    addR("BTN_A", "BTN_B", btnDown ? R_SW : R_OPEN);        // 按钮
+    for (k = 0; k < wires.length; k++) addR(wires[k].a, wires[k].b, R_WIRE);
+    for (k = 0; k < n; k++) G[k][k] += LEAK;                // 对地微漏：防矩阵奇异
+
+    var v = gauss(G, B);
+    if (!v) return null;
+    function d(a, b) { return v[NIDX[a]] - v[NIDX[b]]; }
+    return {
+      vBat:  d("BAT_P", "BAT_N"),
+      iBat:  (VBAT - d("BAT_P", "BAT_N")) / R_INT,
+      iHorn: Math.abs(d("HORN_P", "HORN_N")) / R_HORN,
+      iCoil: Math.abs(d("R85", "R86")) / R_COIL,
+      iBtn:  Math.abs(d("BTN_A", "BTN_B")) / (btnDown ? R_SW : R_OPEN)
+    };
+  }
+
+  /* 电路实时状态（每帧刷新） */
+  var circuit = {
+    iBat: 0, iHorn: 0, iCoil: 0, iBtn: 0, vBat: VBAT,
+    coil: false, contact: false, short: false, horn: false, ready: false
+  };
+
+  /* 迭代求解：触点状态影响电流、电流又决定触点，所以跑到不动点为止。
+     起始值取上次的触点状态 —— 这样继电器自锁电路才能保持住。 */
+  function evalCircuit() {
+    var closed = relayState, sol = null;
+    for (var it = 0; it < 8; it++) {
+      sol = solveCircuit(closed);
+      if (!sol) { sol = { vBat: VBAT, iBat: 0, iHorn: 0, iCoil: 0, iBtn: 0 }; closed = false; break; }
+      var want = sol.iCoil > I_COIL_ON;
+      if (want === closed) break;
+      closed = want;
+    }
+    relayState = closed;
+    circuit.vBat = sol.vBat;
+    circuit.iBat = sol.iBat;
+    circuit.iHorn = sol.iHorn;
+    circuit.iCoil = sol.iCoil;
+    circuit.iBtn = sol.iBtn;
+    circuit.coil = sol.iCoil > I_COIL_ON;
+    circuit.contact = closed;
+    circuit.short = sol.iBat > I_SHORT;
+    circuit.horn = sol.iHorn > I_HORN_ON;
+    circuit.ready = allDone();
+    return circuit;
+  }
+  function wireColor(a, b) {
+    if (a === "BAT_P" || b === "BAT_P") return "#d8342a";       // 正电：红
+    if (a === "BAT_N" || b === "BAT_N") return "#22262d";       // 搭铁：黑
+    return COL[(colIdx++) % COL.length];
+  }
+
+  /* ================================================================
+     5. 画布与坐标换算
+     ================================================================ */
+  var cv = $("cv"), ctx = cv.getContext("2d");
+  var scale = 1, offX = 0, offY = 0, dpr = 1;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var cw = window.innerWidth, ch = window.innerHeight;
+    scale = Math.min(cw / W, ch / H) * 0.97;
+    offX = (cw - W * scale) / 2;
+    offY = (ch - H * scale) / 2;
+    cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+    cv.style.width = cw + "px"; cv.style.height = ch + "px";
+  }
+  window.addEventListener("resize", resize);
+
+  function toLogical(ev) {
+    var r = cv.getBoundingClientRect();
+    return { x: (ev.clientX - r.left - offX) / scale, y: (ev.clientY - r.top - offY) / scale };
+  }
+  function hitTerm(p) {
+    for (var i = 0; i < KEYS.length; i++) {
+      var k = KEYS[i], t = TERMS[k];
+      if ((p.x - t.x) * (p.x - t.x) + (p.y - t.y) * (p.y - t.y) < 18 * 18) return k;
+    }
+    return null;
+  }
+  function wirePath(w) {                        // 带下垂的二次贝塞尔
+    var A = TERMS[w.a], B = TERMS[w.b];
+    var mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+    var d = Math.hypot(B.x - A.x, B.y - A.y);
+    var sag = Math.min(90, d * 0.30);
+    var isVert = Math.abs(B.x - A.x) < 60;
+    var cx = mx + (isVert ? sag * 0.75 : 0), cy = my + sag;
+    return { a: A, b: B, cx: cx, cy: cy };
+  }
+  function hitWire(p) {
+    for (var i = wires.length - 1; i >= 0; i--) {
+      var q = wirePath(wires[i]);
+      for (var s = 0; s <= 1.0001; s += 0.05) {   // 采样贝塞尔做命中测试
+        var t = 1 - s;
+        var x = t * t * q.a.x + 2 * t * s * q.cx + s * s * q.b.x;
+        var y = t * t * q.a.y + 2 * t * s * q.cy + s * s * q.b.y;
+        if ((p.x - x) * (p.x - x) + (p.y - y) * (p.y - y) < 12 * 12) return i;
+      }
+    }
+    return -1;
+  }
+
+  /* ================================================================
+     6. 交互
+     ================================================================ */
+  cv.addEventListener("pointerdown", function (ev) {
+    if (!started) return;
+    var p = toLogical(ev);
+    var k = hitTerm(p);
+    if (k) {
+      drag = { from: k, x: p.x, y: p.y };
+      cv.setPointerCapture(ev.pointerId);
+      return;
+    }
+    var wi = hitWire(p);
+    if (wi >= 0) { wires.splice(wi, 1); sfxWire(); toast("拆掉一根线"); }
+  });
+  cv.addEventListener("pointermove", function (ev) {
+    var p = toLogical(ev);
+    hover = hitTerm(p);
+    hoverWire = hover ? -1 : hitWire(p);
+    if (drag) { drag.x = p.x; drag.y = p.y; }
+  });
+  cv.addEventListener("pointerup", function (ev) {
+    if (!drag) return;
+    var p = toLogical(ev);
+    var k = hitTerm(p);
+    if (k && k !== drag.from) {
+      // 同一对柱子不允许重复连
+      var dup = has(drag.from, k);
+      if (dup) toast("这两根柱子已经连过了");
+      else {
+        wires.push({ a: drag.from, b: k, color: wireColor(drag.from, k), born: time });
+        sfxWire();
+        checkInstant();
+      }
+    }
+    drag = null;
+  });
+  cv.addEventListener("pointercancel", function () { drag = null; });
+
+  function checkInstant() {                    // 每接一根线即时反馈
+    evalCircuit();
+    if (circuit.short) {
+      sfxSpark(); sfxClick(false);
+      for (var i = 0; i < 26; i++) {
+        sparks.push({ x: TERMS.BAT_P.x, y: TERMS.BAT_P.y, vx: (Math.random() - .5) * 420, vy: -Math.random() * 320, life: .5 });
+      }
+      toast("⚠ 正负极之间只剩导线了 —— 短路，实测 " + circuit.iBat.toFixed(0) + " A");
+      return;
+    }
+    if (circuit.horn) {
+      toast("⚡ 喇叭回路已经通了（" + circuit.iHorn.toFixed(1) + " A）—— 现在就在响");
+      return;
+    }
+    if (circuit.coil) { toast("线圈回路通电，继电器吸合"); return; }
+    if (allDone()) { toast("接线完成 —— 按下喇叭按钮试试"); }
+  }
+
+  function toast(msg) { toastMsg = msg; toastT = 2.2; }
+
+  /* 工具条按钮 */
+  $("bHonk").addEventListener("pointerdown", function (e) { e.preventDefault(); btnDown = true; });
+  $("bHonk").addEventListener("pointerup", function () { btnDown = false; });
+  $("bHonk").addEventListener("pointerleave", function () { btnDown = false; });
+  $("bHonk").addEventListener("pointercancel", function () { btnDown = false; });
+
+  $("bAuto").addEventListener("click", function () {
+    autoHonk = !autoHonk;
+    this.classList.toggle("on", autoHonk);
+    toast(autoHonk ? "连续鸣笛：开" : "连续鸣笛：关");
+  });
+  $("bHint").addEventListener("click", function () {
+    for (var i = 0; i < NEEDED.length; i++) {
+      if (!has(NEEDED[i][0], NEEDED[i][1])) {
+        hintIdx = i; hintT = 4.5;
+        toast("提示：" + NEEDED[i][2]);
+        return;
+      }
+    }
+    toast(circuit.horn ? "喇叭已经在响了" : "标准 6 线已经全部接好，按喇叭吧");
+  });
+  $("bDemo").addEventListener("click", function () {
+    wires = []; colIdx = 0;
+    for (var i = 0; i < NEEDED.length; i++) {
+      wires.push({ a: NEEDED[i][0], b: NEEDED[i][1], color: wireColor(NEEDED[i][0], NEEDED[i][1]), born: time });
+    }
+    demoStep = 1; demoT = 1.2;
+    toast("演示接线完成，听喇叭");
+  });
+  $("bClear").addEventListener("click", function () { wires = []; toast("已拆掉全部线"); });
+
+  $("bStart").addEventListener("click", function () {
+    started = true;
+    $("ov").classList.add("hidden");
+    audio();
+    if (actx && actx.state === "suspended") actx.resume();
+    loadHorn();
+  });
+
+  /* 键盘：空格鸣笛，方便长按 */
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "Space") { e.preventDefault(); btnDown = true; }
+  });
+  document.addEventListener("keyup", function (e) {
+    if (e.code === "Space") { e.preventDefault(); btnDown = false; }
+  });
+
+  /* ================================================================
+     7. 绘制
+     ================================================================ */
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function label(txt, x, y, size, color, align) {
+    ctx.font = (size || 11) + "px 'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.fillStyle = color || "#cfdae6";
+    ctx.textAlign = align || "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(txt, x, y);
+  }
+
+  function drawBench() {
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#1a1f27"); g.addColorStop(0.55, "#141920"); g.addColorStop(1, "#0e1218");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // 台面
+    ctx.fillStyle = "#20262f";
+    ctx.beginPath(); ctx.moveTo(0, 560); ctx.lineTo(W, 560); ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, 560); ctx.lineTo(W, 560); ctx.stroke();
+    // 网格
+    ctx.strokeStyle = "rgba(255,255,255,.028)";
+    for (var x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 560); ctx.stroke(); }
+    for (var y = 0; y < 560; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  }
+
+  function drawBattery() {
+    // 外壳
+    var g = ctx.createLinearGradient(70, 140, 280, 380);
+    g.addColorStop(0, "#2b3138"); g.addColorStop(1, "#181c22");
+    ctx.fillStyle = g; rr(74, 140, 206, 236, 10); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.stroke();
+    // 标签
+    ctx.fillStyle = "#d9c148"; rr(88, 152, 178, 30, 5); ctx.fill();
+    ctx.fillStyle = "#1b1b1b";
+    label("VARTA  ·  12V  44Ah", 177, 167, 12, "#1b1b1b");
+    // 接线柱（金属柱）
+    [["BAT_P", "#e8443a"], ["BAT_N", "#3aa7e8"]].forEach(function (pair) {
+      var t = TERMS[pair[0]];
+      ctx.fillStyle = "#8d949c"; ctx.beginPath(); ctx.arc(t.x, t.y + 34, 15, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#b9c0c8"; ctx.beginPath(); ctx.arc(t.x, t.y + 30, 11, 0, 6.29); ctx.fill();
+    });
+    label("蓄电池", 177, 300, 13, "rgba(255,255,255,.42)");
+    label("BATTERY", 177, 320, 9, "rgba(255,255,255,.22)");
+  }
+
+  function drawRelay() {
+    var on = relayLatch;
+    ctx.fillStyle = "rgba(40,48,58,.92)"; rr(370, 92, 230, 148, 10); ctx.fill();
+    ctx.strokeStyle = on ? "rgba(120,230,160,.75)" : "rgba(255,255,255,.14)";
+    ctx.lineWidth = on ? 2 : 1; ctx.stroke(); ctx.lineWidth = 1;
+    // 透明外壳里的线圈 + 触点
+    ctx.strokeStyle = "rgba(180,200,220,.30)"; ctx.lineWidth = 2;
+    // 线圈（左侧）
+    for (var i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.ellipse(414, 150 - i * 9, 15, 5, 0, 0, 6.29);
+      ctx.strokeStyle = on ? "rgba(255,190,90,.85)" : "rgba(190,150,90,.45)";
+      ctx.stroke();
+    }
+    // 触点（右侧，吸合时闭合）
+    var armY = on ? 126 : 116;
+    ctx.strokeStyle = on ? "#7fe8a0" : "#8fa0b2"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(500, 132); ctx.lineTo(500, armY); ctx.lineTo(552, armY); ctx.stroke();
+    ctx.fillStyle = on ? "#7fe8a0" : "#8fa0b2";
+    ctx.beginPath(); ctx.arc(500, 132, 4, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(556, on ? 126 : 100, 4, 0, 6.29); ctx.fill();
+    ctx.lineWidth = 1;
+    label("继电器 RELAY", 485, 108, 12, "rgba(255,255,255,.72)");
+    label(on ? "已吸合" : "未吸合", 485, 205, 11, on ? "#7fe8a0" : "rgba(255,255,255,.35)");
+    // 引脚引线到接线柱
+    [["R30", 404], ["R87", 458], ["R85", 512], ["R86", 566]].forEach(function (pr) {
+      var t = TERMS[pr[0]];
+      ctx.strokeStyle = "rgba(190,200,212,.5)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(pr[1], 240); ctx.lineTo(pr[1], t.y - 10); ctx.stroke();
+      ctx.lineWidth = 1;
+    });
+  }
+
+  function drawButton() {
+    ctx.fillStyle = "rgba(40,48,58,.92)"; rr(662, 120, 258, 120, 10); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.14)"; ctx.stroke();
+    label("喇叭按钮 HORN BUTTON", 791, 140, 11, "rgba(255,255,255,.6)");
+    // 按钮本体（按下时下沉）
+    var y = btnDown ? 178 : 172;
+    ctx.fillStyle = btnDown ? "#8f1f18" : "#c9382c";
+    ctx.beginPath(); ctx.arc(791, y, 30, 0, 6.29); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.16)";
+    ctx.beginPath(); ctx.arc(791, y - 8, 22, Math.PI * 1.1, Math.PI * 1.9); ctx.fill();
+    ctx.strokeStyle = "#2a2f36"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(791, y, 30, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1;
+    label(btnDown ? "按下" : "按下鸣笛", 791, 224, 11, "rgba(255,255,255,.5)");
+    // 按钮引线
+    [["BTN_A", 712], ["BTN_B", 856]].forEach(function (pr) {
+      ctx.strokeStyle = "rgba(190,200,212,.5)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(pr[1], 240); ctx.lineTo(pr[1], TERMS[pr[0]].y - 10); ctx.stroke();
+      ctx.lineWidth = 1;
+    });
+  }
+
+  function drawHorn() {
+    // 喇叭本体：红色蜗壳 + 喇叭口
+    ctx.save();
+    ctx.translate(0, 0);
+    // 括弧外形（喇叭筒）
+    ctx.fillStyle = hornOn ? "#e2483a" : "#c9382c";
+    ctx.beginPath();
+    ctx.moveTo(470, 420);
+    ctx.lineTo(560, 404);
+    ctx.quadraticCurveTo(624, 452, 560, 520);
+    ctx.lineTo(470, 504);
+    ctx.closePath(); ctx.fill();
+    // 喇叭口内圈
+    ctx.fillStyle = "#8f1f18";
+    ctx.beginPath(); ctx.ellipse(600, 462, 26, 62, 0.16, 0, 6.29); ctx.fill();
+    ctx.fillStyle = "#5e1410";
+    ctx.beginPath(); ctx.ellipse(602, 462, 13, 40, 0.16, 0, 6.29); ctx.fill();
+    // 后端驱动（银色圆盘）
+    var g = ctx.createLinearGradient(400, 410, 476, 512);
+    g.addColorStop(0, "#c3cad2"); g.addColorStop(0.5, "#8d949c"); g.addColorStop(1, "#5f666e");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(452, 462, 46, 54, 0, 0, 6.29); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.stroke();
+    // 中央黑盖
+    ctx.fillStyle = "#22262c";
+    ctx.beginPath(); ctx.ellipse(444, 462, 22, 26, 0, 0, 6.29); ctx.fill();
+    ctx.restore();
+    // 接线柱
+    [["HORN_P", "#e8443a"], ["HORN_N", "#3aa7e8"]].forEach(function (pair) {
+      var t = TERMS[pair[0]];
+      ctx.fillStyle = "#8d949c"; ctx.beginPath(); ctx.arc(t.x, t.y - 12, 9, 0, 6.29); ctx.fill();
+      ctx.strokeStyle = "rgba(190,200,212,.5)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(t.x, t.y - 4); ctx.lineTo(t.x, t.y + 8); ctx.stroke();
+      ctx.lineWidth = 1;
+    });
+    label("喇叭 HORN", 500, 552, 12, "rgba(255,255,255,.42)");
+    // 声波
+    if (hornOn) {
+      for (var i = 0; i < waves.length; i++) {
+        var w = waves[i];
+        ctx.strokeStyle = "rgba(255,210,120," + Math.max(0, w.life * 0.85).toFixed(2) + ")";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(636, 462, w.r, -0.85, 0.85);
+        ctx.stroke();
+      }
+      ctx.lineWidth = 1;
+    }
+  }
+
+  function drawChecklist() {
+    ctx.fillStyle = "rgba(30,37,46,.9)"; rr(58, 404, 296, 190, 10); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.stroke();
+    label("接线清单", 206, 424, 12, "rgba(255,255,255,.72)");
+    for (var i = 0; i < NEEDED.length; i++) {
+      var ok = has(NEEDED[i][0], NEEDED[i][1]);
+      var y = 446 + i * 22;
+      ctx.fillStyle = ok ? "#35b06a" : "rgba(255,255,255,.28)";
+      ctx.beginPath(); ctx.arc(80, y, 7, 0, 6.29); ctx.fill();
+      if (ok) {
+        ctx.strokeStyle = "#0d1117"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(76, y); ctx.lineTo(79, y + 3); ctx.lineTo(84, y - 3); ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+      label(NEEDED[i][2], 96, y, 11.5, ok ? "#c9f0da" : "rgba(220,230,240,.62)", "left");
+    }
+  }
+
+  function drawMeter() {
+    ctx.fillStyle = "rgba(30,37,46,.94)"; rr(700, 384, 232, 186, 10); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.stroke();
+    label("分贝仪 SOUND LEVEL", 816, 402, 10.5, "rgba(255,255,255,.55)");
+    // 数字屏
+    ctx.fillStyle = "#0b1410"; rr(716, 414, 200, 44, 6); ctx.fill();
+    var loud = db >= 80;
+    ctx.font = "bold 30px 'Consolas',monospace";
+    ctx.fillStyle = loud ? "#ff6b5b" : "#6ee7a8";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(db.toFixed(1), 806, 437);
+    ctx.font = "12px 'Consolas',monospace";
+    ctx.fillStyle = "rgba(255,255,255,.5)";
+    ctx.fillText("dB", 886, 441);
+    // 峰值
+    label("峰值  " + dbPeak.toFixed(1) + " dB", 816, 472, 11, "rgba(255,255,255,.5)");
+    // 条形表
+    var bx = 716, by = 492, bw = 200, bh = 12;
+    ctx.fillStyle = "rgba(255,255,255,.08)"; rr(bx, by, bw, bh, 6); ctx.fill();
+    var f = Math.max(0, Math.min(1, (db - 30) / 100));
+    var bg = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+    bg.addColorStop(0, "#35b06a"); bg.addColorStop(0.6, "#e8c02a"); bg.addColorStop(1, "#e8443a");
+    ctx.fillStyle = bg; rr(bx, by, Math.max(2, bw * f), bh, 6); ctx.fill();
+    // 刻度
+    for (var d = 30; d <= 130; d += 20) {
+      var x = bx + (d - 30) / 100 * bw;
+      ctx.strokeStyle = "rgba(255,255,255,.18)";
+      ctx.beginPath(); ctx.moveTo(x, by + bh); ctx.lineTo(x, by + bh + 4); ctx.stroke();
+      label(String(d), x, by + bh + 14, 9, "rgba(255,255,255,.35)");
+    }
+    // 状态
+    var st = circuit.short ? ["短路！", "#ff6b5b"]
+      : hornOn ? ["喇叭鸣响中", "#ffd45b"]
+      : circuit.ready ? ["准备就绪 · 按喇叭", "#6ee7a8"]
+      : circuit.coil ? ["继电器已吸合", "#7fd1ff"]
+      : ["线路未接通", "rgba(255,255,255,.42)"];
+    label(st[0], 816, 552, 12, st[1]);
+  }
+
+  /* 实时电气读数：电压 + 三条支路电流（求解器算出来的真值） */
+  function drawCurrents() {
+    var x = 648, y = 282, w = 312, h = 96;
+    ctx.fillStyle = "rgba(30,37,46,.92)"; rr(x, y, w, h, 10); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.stroke();
+    label("实时电气读数 LIVE", x + 16, y + 18, 10.5, "rgba(255,255,255,.55)");
+
+    ctx.font = "bold 13px 'Consolas',monospace";
+    ctx.textBaseline = "middle";
+
+    // 电池：电压 + 总电流
+    label("电池", x + 16, y + 41, 11, "rgba(210,222,234,.6)");
+    ctx.textAlign = "left"; ctx.fillStyle = "#8fd8ff";
+    ctx.fillText(circuit.vBat.toFixed(2) + " V", x + 70, y + 41);
+    ctx.textAlign = "right";
+    ctx.fillStyle = circuit.short ? "#ff6b5b" : "rgba(210,222,234,.92)";
+    ctx.fillText(circuit.iBat.toFixed(2) + " A", x + w - 16, y + 41);
+
+    // 喇叭支路
+    label("喇叭", x + 16, y + 63, 11, "rgba(210,222,234,.6)");
+    ctx.textAlign = "right";
+    ctx.fillStyle = circuit.horn ? "#ffd45b" : (circuit.iHorn > 0.01 ? "rgba(210,222,234,.55)" : "rgba(210,222,234,.35)");
+    ctx.fillText(circuit.iHorn.toFixed(2) + " A" + (circuit.horn ? "  起振 ✔" : ""), x + w - 16, y + 63);
+
+    // 线圈
+    label("线圈", x + 16, y + 84, 11, "rgba(210,222,234,.6)");
+    ctx.textAlign = "right";
+    ctx.fillStyle = circuit.coil ? "#7fe8a0" : "rgba(210,222,234,.35)";
+    ctx.fillText((circuit.iCoil * 1000).toFixed(0) + " mA" + (circuit.coil ? "  吸合" : ""), x + w - 16, y + 84);
+
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  }
+
+  function drawTerminals() {
+    for (var i = 0; i < KEYS.length; i++) {
+      var k = KEYS[i], t = TERMS[k];
+      var isHover = hover === k || (drag && drag.from === k);
+      var used = wires.some(function (w) { return w.a === k || w.b === k; });
+      // 悬停光环
+      if (isHover) {
+        ctx.fillStyle = "rgba(127,209,255,.18)";
+        ctx.beginPath(); ctx.arc(t.x, t.y, 20, 0, 6.29); ctx.fill();
+      }
+      // 提示时闪烁
+      if (hintT > 0 && hintIdx >= 0 && (NEEDED[hintIdx][0] === k || NEEDED[hintIdx][1] === k)) {
+        ctx.fillStyle = "rgba(255,212,91," + (0.18 + 0.18 * Math.sin(time * 10)).toFixed(2) + ")";
+        ctx.beginPath(); ctx.arc(t.x, t.y, 22, 0, 6.29); ctx.fill();
+      }
+      ctx.fillStyle = t.kind === "pos" ? "#e8443a" : t.kind === "neg" ? "#2f6fb8" : "#6b7480";
+      ctx.beginPath(); ctx.arc(t.x, t.y, 10, 0, 6.29); ctx.fill();
+      ctx.strokeStyle = used ? "rgba(120,230,160,.85)" : "rgba(255,255,255,.4)";
+      ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = "#0d1117";
+      ctx.beginPath(); ctx.arc(t.x, t.y, 5, 0, 6.29); ctx.fill();
+      label(t.t, t.x, t.y + 0.5, 9, t.kind === "relay" ? "#dfe8f2" : "#fff");
+    }
+  }
+
+  function drawWires() {
+    for (var i = 0; i < wires.length; i++) {
+      var w = wires[i], q = wirePath(w);
+      var grow = Math.min(1, (time - w.born) / 0.18);
+      ctx.lineCap = "round";
+      // 阴影
+      ctx.strokeStyle = "rgba(0,0,0,.5)"; ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.moveTo(q.a.x, q.a.y);
+      ctx.quadraticCurveTo(q.cx, q.cy, q.a.x + (q.b.x - q.a.x) * grow, q.a.y + (q.b.y - q.a.y) * grow);
+      ctx.stroke();
+      // 线身
+      ctx.strokeStyle = w.color; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(q.a.x, q.a.y);
+      ctx.quadraticCurveTo(q.cx, q.cy, q.a.x + (q.b.x - q.a.x) * grow, q.a.y + (q.b.y - q.a.y) * grow);
+      ctx.stroke();
+      // 高光
+      ctx.strokeStyle = "rgba(255,255,255,.16)"; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(q.a.x, q.a.y);
+      ctx.quadraticCurveTo(q.cx, q.cy, q.b.x, q.b.y); ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    // 悬停线高亮
+    if (hoverWire >= 0 && wires[hoverWire]) {
+      var q2 = wirePath(wires[hoverWire]);
+      ctx.strokeStyle = "rgba(255,90,90,.85)"; ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.moveTo(q2.a.x, q2.a.y);
+      ctx.quadraticCurveTo(q2.cx, q2.cy, q2.b.x, q2.b.y); ctx.stroke();
+      ctx.lineWidth = 1;
+      label("点击拆掉", (q2.a.x + q2.b.x) / 2, (q2.a.y + q2.b.y) / 2 + 26, 11, "rgba(255,140,140,.9)");
+    }
+    // 正在拖的线
+    if (drag) {
+      var a = TERMS[drag.from];
+      ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 3;
+      ctx.setLineDash([7, 6]);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(drag.x, drag.y); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineWidth = 1;
+      var hk = hitTerm({ x: drag.x, y: drag.y });
+      if (hk && hk !== drag.from) {
+        ctx.fillStyle = "rgba(120,230,160,.9)";
+        ctx.beginPath(); ctx.arc(TERMS[hk].x, TERMS[hk].y, 15, 0, 6.29); ctx.fill();
+      }
+    }
+  }
+
+  function drawSparks() {
+    for (var i = 0; i < sparks.length; i++) {
+      var s = sparks[i];
+      ctx.fillStyle = "rgba(255," + Math.floor(150 + 90 * Math.random()) + ",80," + Math.max(0, s.life * 2).toFixed(2) + ")";
+      ctx.fillRect(s.x - 2, s.y - 2, 4, 4);
+    }
+  }
+
+  function drawToast() {
+    if (toastT <= 0) return;
+    ctx.globalAlpha = Math.min(1, toastT * 1.6);
+    ctx.font = "bold 15px 'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif";
+    var tw = ctx.measureText(toastMsg).width + 44;
+    ctx.fillStyle = "rgba(12,16,22,.9)";
+    rr(W / 2 - tw / 2, 60, tw, 40, 20); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.16)"; ctx.stroke();
+    label(toastMsg, W / 2, 80, 15, "#eaf1f8");
+    ctx.globalAlpha = 1;
+  }
+
+  /* ================================================================
+     8. 主循环
+     ================================================================ */
+  var clock = 0, last = 0;
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    var dt = Math.min(0.05, (ts - last) / 1000 || 0.016);
+    last = ts;
+    time += dt;
+
+    if (!started) return;
+
+    /* --- 电路状态（真实节点分析求解）--- */
+    // 连续鸣笛模式：先改按钮状态，再求解，顺序不能反
+    if (autoHonk) {
+      autoT -= dt;
+      if (autoT <= 0) { btnDown = !btnDown; autoT = btnDown ? 0.95 : 0.45; }
+    }
+    evalCircuit();
+
+    var want = circuit.horn;
+    if (want && !hornOn) {
+      hornOn = true; relayT = 0.5; sfxClick(true); honkStart();
+    } else if (!want && hornOn) {
+      hornOn = false; sfxClick(false); honkStop();
+    }
+    relayLatch = circuit.contact;      // 触点真实状态驱动动画
+
+    // 线圈吸合但喇叭支路电流不够（例如喇叭和线圈串在一起）→ 只有继电器「咔哒」
+    if (circuit.coil && !circuit.horn && !circuit.short) {
+      if (relayT <= 0) { relayT = 0.5; sfxClick(true); }
+      if (!clackWarned) { clackWarned = true; toast("继电器吸合了，但喇叭那一路电流不够，不响"); }
+    } else clackWarned = false;
+    relayT -= dt;
+
+    // 鸣笛电流全走小按钮 → 真车里按钮会烧（这正是要继电器的原因）
+    if (circuit.iBtn > I_BTN_MAX) {
+      if (!btnWarned) {
+        btnWarned = true;
+        toast("⚠ 按钮上过了 " + circuit.iBtn.toFixed(1) + " A，真车这个按钮会烧掉 —— 所以才要继电器");
+      }
+    } else btnWarned = false;
+
+    /* --- 分贝仪 --- */
+    if (hornOn) {
+      dbTarget = 112 + Math.sin(time * 22) * 3 + (Math.random() - 0.5) * 4;
+    } else if (circuit.short) {
+      dbTarget = 88 + Math.random() * 10;
+    } else if (circuit.contact) {
+      dbTarget = 46 + Math.random() * 4;
+    } else {
+      dbTarget = 33 + Math.random() * 2;
+    }
+    db += (dbTarget - db) * Math.min(1, dt * (hornOn ? 9 : 5));
+    if (db > dbPeak) dbPeak = db;
+
+    /* --- 特效 --- */
+    if (hornOn && Math.random() < 0.28) waves.push({ r: 30, life: 1 });
+    for (var i = waves.length - 1; i >= 0; i--) {
+      waves[i].r += dt * 190; waves[i].life -= dt * 1.15;
+      if (waves[i].life <= 0) waves.splice(i, 1);
+    }
+    for (var j = sparks.length - 1; j >= 0; j--) {
+      var s = sparks[j];
+      s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 900 * dt; s.life -= dt * 1.6;
+      if (s.life <= 0) sparks.splice(j, 1);
+    }
+    if (circuit.short && Math.random() < 0.5) {
+      sparks.push({ x: TERMS.BAT_P.x, y: TERMS.BAT_P.y, vx: (Math.random() - .5) * 300, vy: -Math.random() * 220, life: .4 });
+    }
+    if (hintT > 0) hintT -= dt;
+    if (toastT > 0) toastT -= dt;
+
+    /* --- 演示自动鸣笛 --- */
+    if (demoStep > 0) {
+      demoT -= dt;
+      if (demoT <= 0) {
+        if (demoStep === 1) { btnDown = true; demoStep = 2; demoT = 1.6; }
+        else if (demoStep === 2) { btnDown = false; demoStep = 3; demoT = 0.5; }
+        else if (demoStep === 3) { btnDown = true; demoStep = 4; demoT = 0.9; }
+        else if (demoStep === 4) { btnDown = false; demoStep = 5; demoT = 0.6; }
+        else { demoStep = 0; }
+      }
+    }
+
+    /* --- 绘制 --- */
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.translate(offX, offY);
+    ctx.scale(scale, scale);
+    // 喇叭响时整体轻微发热
+    if (hornOn) { ctx.fillStyle = "rgba(232,68,58,.045)"; ctx.fillRect(0, 0, W, H); }
+
+    drawBench();
+    drawBattery();
+    drawRelay();
+    drawButton();
+    drawHorn();
+    drawChecklist();
+    drawMeter();
+    drawWires();
+    drawCurrents();          // 读数面板画在导线之上，保证可读
+    drawTerminals();
+    drawSparks();
+    drawToast();
+  }
+
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
