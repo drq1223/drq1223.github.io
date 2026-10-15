@@ -626,7 +626,9 @@
     var t = pending.tile, from = pending.from;
     var pl = players[q];
     var got = takeFromHand(pl, t.s, o.a, 1).concat(takeFromHand(pl, t.s, o.b, 1));
-    pl.melds.push({ type: "chi", tiles: [t].concat(got), from: from });
+    // 刚上（吃）的那张放最后：副露从左到右 = 手牌 a、手牌 b、上的牌，
+    // 一眼能看出刚上的是什么（原来 [t].concat(got) 把上的牌排最左，混在手牌里看不出来）
+    pl.melds.push({ type: "chi", tiles: got.concat([t]), from: from });
     sortHand(pl.hand);
     finishClaim(q, "吃");
   }
