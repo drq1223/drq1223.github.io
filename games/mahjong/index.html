@@ -1,0 +1,1778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>麻将 · 血战简化版 · Mahjong</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #0f5132;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    overscroll-behavior: none; touch-action: none;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  /* #app 是撑满视口的定位元素，会盖在 canvas 之上吃掉所有点击 —— 必须让它不接收事件 */
+  #app { position: fixed; inset: 0; pointer-events: none; }
+  /* canvas 提到 #app 之上（双保险）；它原本是非定位元素，会被任何 fixed 元素挡住 */
+  canvas {
+    display: block; margin: auto; position: relative; z-index: 1;
+    touch-action: none; -webkit-user-drag: none;
+  }
+
+  #bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 12px; background: linear-gradient(180deg, rgba(6,32,20,.94), rgba(6,32,20,.5) 70%, transparent);
+  }
+  #bar .brand { font-size: 13px; font-weight: 800; letter-spacing: 1px; color: #eaf5ee; margin-right: auto; }
+  #bar .brand small { display: block; font-size: 10px; font-weight: 400; opacity: .55; letter-spacing: 0; }
+  /* 牌墙/出牌数等信息放这里，而不是画在 canvas 左上角 —— 那样会被这条顶栏压住重叠 */
+  #bar .stat { font-size: 12px; font-weight: 700; color: rgba(234,245,238,.78); margin-right: 4px; white-space: nowrap; }
+  #tip.myturn { color: #12281c; background: #ffd45b; border-color: rgba(0,0,0,.2); font-weight: 800; }
+  .btn {
+    cursor: pointer; font: inherit; font-size: 12px; font-weight: 700;
+    padding: 7px 13px; border-radius: 999px; color: #eaf5ee;
+    border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08);
+    transition: background .15s, border-color .15s, transform .1s;
+  }
+  .btn:hover { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.36); }
+  .btn:active { transform: translateY(1px); }
+  .btn.pri { background: rgba(232,68,58,.24); border-color: rgba(232,68,58,.6); color: #ffd9d4; }
+  .btn.pri:hover { background: rgba(232,68,58,.38); }
+
+  /* 动作按钮（碰/吃/胡/过） */
+  #acts {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 12;
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  }
+  #acts.hidden { display: none; }
+  #acts button {
+    cursor: pointer; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: 1px;
+    padding: 11px 22px; border-radius: 12px; color: #12281c;
+    border: 2px solid rgba(0,0,0,.18); background: #f4e9c8;
+    box-shadow: 0 4px 14px rgba(0,0,0,.34);
+  }
+  #acts button.win { background: #ffd45b; }
+  #acts button.pass { background: rgba(255,255,255,.28); color: #eaf5ee; font-weight: 600; }
+  #acts button:hover { filter: brightness(1.08); }
+  #acts button:active { transform: translateY(2px); }
+
+  #tip {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 11;
+    font-size: 12.5px; color: #dceee3; background: rgba(6,32,20,.78);
+    border: 1px solid rgba(255,255,255,.14); border-radius: 999px; padding: 7px 18px;
+    white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis;
+    pointer-events: none;          /* 它压在手牌下沿，不拦事件 */
+  }
+
+  #ov {
+    position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; overflow-y: auto;
+    background: rgba(4,20,12,.95); color: #eaf5ee; text-align: center; padding: 24px;
+  }
+  #ov.hidden { display: none; }
+  #ov h1 { font-size: 27px; letter-spacing: 3px; }
+  #ov .lead { font-size: 13px; line-height: 1.85; opacity: .82; max-width: 640px; }
+  #ov .lead b { color: #ffd45b; }
+
+  /* 联机房间 */
+  #ov .net {
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 12px; padding: 14px 18px; max-width: 640px; width: 100%; text-align: left;
+  }
+  #ov .net h3 { font-size: 13px; letter-spacing: 1px; margin-bottom: 10px; opacity: .9; }
+  #ov .net-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #ov .net input {
+    font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 9px;
+    border: 1px solid rgba(255,255,255,.24); background: rgba(0,0,0,.3); color: #eaf5ee;
+    min-width: 0; flex: 1 1 130px;
+  }
+  #ov .net input::placeholder { color: rgba(234,245,238,.4); }
+  #ov .net .st { margin-top: 10px; font-size: 12px; line-height: 1.7; color: rgba(234,245,238,.72); }
+  #ov .net .st b { color: #ffd45b; }
+  #ov .net .st .seat { display: inline-block; margin-right: 8px; }
+  #ov .net .st .seat.mine { color: #7fe0a8; font-weight: 700; }
+  #roomtag {
+    display: none; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+    color: #d6ecdd; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 999px; padding: 6px 12px;
+  }
+  #roomtag.on { display: inline-flex; }
+  #roomtag i { font-style: normal; color: #ffd45b; letter-spacing: 1px; }
+  #ov .card {
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 12px; padding: 14px 18px; font-size: 12.5px; line-height: 1.9; text-align: left;
+    max-width: 640px; width: 100%;
+  }
+  #ov .card div { opacity: .88; }
+  #ov .card em { color: #ffd45b; font-style: normal; font-weight: 700; }
+
+  /* 语音面板：点顶栏「语音」弹出。放在 #acts 上方，避免盖住碰/吃/胡按钮 */
+  #vp {
+    position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); z-index: 20;
+    width: min(700px, 94vw); max-height: min(330px, 42vh);
+    display: flex; flex-direction: column; overflow: hidden;
+    background: rgba(6,32,20,.97); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 14px; box-shadow: 0 14px 44px rgba(0,0,0,.55);
+  }
+  #vp.hidden { display: none; }
+  #vp .vp-head {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.12);
+  }
+  #vp .vp-tab {
+    cursor: pointer; font: inherit; font-size: 12px; font-weight: 700;
+    padding: 5px 13px; border-radius: 999px; color: rgba(234,245,238,.72);
+    border: 1px solid rgba(255,255,255,.16); background: transparent;
+  }
+  #vp .vp-tab:hover { background: rgba(255,255,255,.1); }
+  #vp .vp-tab.on { color: #12281c; background: #ffd45b; border-color: #ffd45b; }
+  #vp .vp-close {
+    cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; margin-left: auto;
+    width: 26px; height: 26px; border-radius: 999px; color: rgba(234,245,238,.8);
+    border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08);
+  }
+  #vp .vp-close:hover { background: rgba(232,68,58,.4); }
+  #vp .vp-body {
+    overflow-y: auto; padding: 10px; display: grid; gap: 7px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+  #vp .vp-body button {
+    cursor: pointer; font: inherit; font-size: 11.5px; line-height: 1.4; text-align: left;
+    color: #eaf5ee; padding: 8px 10px; border-radius: 9px; min-height: 36px;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07);
+    overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  #vp .vp-body button:hover { background: rgba(255,217,91,.24); border-color: rgba(255,217,91,.55); color: #fff8e0; }
+  #vp .vp-body button:active { transform: translateY(1px); }
+  #vp .vp-foot {
+    padding: 6px 11px; font-size: 10.5px; line-height: 1.5;
+    color: rgba(234,245,238,.5); border-top: 1px solid rgba(255,255,255,.1);
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="bar">
+  <div class="brand">麻将 · 简化版<small>MAHJONG · 万筒条 + 东南西北 = 124 张</small></div>
+  <span class="stat" id="stat"></span>
+  <div id="roomtag">房间 <i id="roomcode">----</i></div>
+  <button class="btn" id="bRestart">重新开局</button>
+  <button class="btn" id="bSort">整理手牌</button>
+  <button class="btn" id="bVoice">语音</button>
+  <button class="btn" id="bLeave" style="display:none;">离开房间</button>
+</div>
+
+<canvas id="cv"></canvas>
+<div id="acts" class="hidden"></div>
+<div id="tip">点击开始</div>
+
+<div id="vp" class="hidden">
+  <div class="vp-head">
+    <button class="vp-tab" data-tab="c">嘴强王者</button>
+    <button class="vp-tab" data-tab="q">快捷聊天</button>
+    <button class="vp-tab" data-tab="d">对局口令</button>
+    <button class="vp-close" id="bVoiceClose" title="关闭">✕</button>
+  </div>
+  <div class="vp-body" id="vpBody"></div>
+  <div class="vp-foot">点一句就放出来，联机时全桌都能听到；不点就安静打牌。语音素材来自
+    <b>斗地主音效板</b>（jarryherr.github.io/doudizhu-soundboard），仅作娱乐。</div>
+</div>
+
+<div id="ov">
+  <h1>麻将 · 简化版</h1>
+
+  <div class="net">
+    <h3>联机对战 · 最多 4 人（空位由电脑补上）</h3>
+    <div class="net-row">
+      <input id="inName" maxlength="8" placeholder="你的昵称">
+      <input id="inRoom" maxlength="8" placeholder="房间码（4~8 位，字母数字）">
+    </div>
+    <div class="net-row" style="margin-top: 8px;">
+      <button class="btn" id="bCreate">创建房间</button>
+      <button class="btn" id="bJoin">加入房间</button>
+    </div>
+    <div class="st" id="netSt">单机模式：直接点最下面的按钮开局，三家由电脑操作。</div>
+  </div>
+
+  <div class="lead">
+    万 / 筒 / 条 各 1-9 各四张，加上<b>东南西北</b>风牌各四张，共 <b>124 张</b>。
+    不含花牌（春夏秋冬 / 梅兰竹菊），也不含中发白。你坐下方，其余三家由电脑操作。
+  </div>
+  <div class="card">
+    <div><em>风牌只能碰不能吃</em>：东南西北凑不成顺子，只能三张成刻子</div>
+    <div><em>屁胡</em>：4 副面子（顺子或刻子）+ 1 对将即可和牌，不要求番型</div>
+    <div><em>碰</em>：手里有两张相同的，别人打出第三张时可以碰</div>
+    <div><em>吃</em>：只能吃<em>上家</em>（你左边的玩家）打出的牌，凑成顺子</div>
+    <div><em>胡</em>：别人打出的牌能让你和牌就点炮；自己摸到则自摸</div>
+    <div>优先级：<em>胡 &gt; 碰 &gt; 吃</em>。同时有人要胡时，离打牌者近的优先</div>
+    <div>额外牌型会自动识别：七对、清一色、碰碰胡</div>
+  </div>
+  <div class="lead" style="opacity:.6;font-size:12px;">点手牌即可打出；有碰/吃/胡时会弹出按钮。</div>
+  <button class="btn pri" id="bStart" style="font-size:15px;padding:12px 34px;">点击开始</button>
+</div>
+
+<script>
+"use strict";
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ================================================================
+     1. 牌与布局
+     ================================================================ */
+  var W = 1200, H = 760;
+  var SUITS = ["w", "t", "b", "z"];            // 万 筒 条 字(风牌)
+  var SUIT_LABEL = { w: "萬", t: "筒", b: "条", z: "" };
+  var WIND = ["", "东", "南", "西", "北"];      // 风牌 rank 1~4
+  var CN = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  function isHonor(t) { return t.s === "z"; }
+
+  // 筒/条的图案点位（归一化坐标），1~9 个
+  var POS = {
+    1: [[.5, .5]],
+    2: [[.5, .32], [.5, .68]],
+    3: [[.26, .26], [.5, .5], [.74, .74]],
+    4: [[.32, .32], [.68, .32], [.32, .68], [.68, .68]],
+    5: [[.3, .3], [.7, .3], [.5, .5], [.3, .7], [.7, .7]],
+    6: [[.32, .24], [.68, .24], [.32, .5], [.68, .5], [.32, .76], [.68, .76]],
+    7: [[.3, .2], [.7, .2], [.5, .38], [.3, .56], [.7, .56], [.3, .76], [.7, .76]],
+    8: [[.32, .2], [.68, .2], [.32, .4], [.68, .4], [.32, .6], [.68, .6], [.32, .8], [.68, .8]],
+    9: [[.24, .24], [.5, .24], [.76, .24], [.24, .5], [.5, .5], [.76, .5], [.24, .76], [.5, .76], [.76, .76]]
+  };
+
+  function makeTile(s, r) { return { s: s, r: r, id: s + r + "_" + Math.random().toString(36).slice(2, 7) }; }
+  function tileKey(t) { return t.s + t.r; }
+  function sortHand(h) {
+    h.sort(function (a, b) {
+      var ia = SUITS.indexOf(a.s), ib = SUITS.indexOf(b.s);
+      if (ia !== ib) return ia - ib;
+      return a.r - b.r;
+    });
+  }
+  function label(t) { return isHonor(t) ? WIND[t.r] : (t.r + SUIT_LABEL[t.s]); }
+
+  /* ================================================================
+     2. 和牌判定（纯函数，可单独测试）
+     ================================================================ */
+  function toCounts(tiles) {
+    var c = {
+      w: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+      t: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+      b: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+      z: [0, 0, 0, 0]                     // 东南西北（风牌不能成顺子）
+    };
+    for (var i = 0; i < tiles.length; i++) c[tiles[i].s][tiles[i].r - 1]++;
+    return c;
+  }
+
+  /* 某一门剩下的牌能否全部拆成面子。
+     数牌允许「刻子 | 顺子」，风牌（allowSeq=false）只允许刻子 —— 东风南風西風北風凑不成顺子。 */
+  function canFormMelds(cnt, allowSeq) {
+    var n = cnt.length, i = 0;
+    while (i < n && cnt[i] === 0) i++;
+    if (i === n) return true;
+    if (cnt[i] >= 3) {
+      cnt[i] -= 3;
+      if (canFormMelds(cnt, allowSeq)) { cnt[i] += 3; return true; }
+      cnt[i] += 3;
+    }
+    if (allowSeq && i <= n - 3 && cnt[i + 1] > 0 && cnt[i + 2] > 0) {
+      cnt[i]--; cnt[i + 1]--; cnt[i + 2]--;
+      if (canFormMelds(cnt, allowSeq)) { cnt[i]++; cnt[i + 1]++; cnt[i + 2]++; return true; }
+      cnt[i]++; cnt[i + 1]++; cnt[i + 2]++;
+    }
+    return false;
+  }
+
+  function allMeldsOK(c) {
+    return canFormMelds(c.w, true) && canFormMelds(c.t, true) &&
+           canFormMelds(c.b, true) && canFormMelds(c.z, false);
+  }
+
+  /* 标准型：need 副面子 + 1 对将（将也可以是风牌） */
+  function isStandardWin(tiles, need) {
+    if (tiles.length !== need * 3 + 2) return false;
+    var c = toCounts(tiles);
+    for (var si = 0; si < SUITS.length; si++) {
+      var s = SUITS[si], len = c[s].length;
+      for (var r = 0; r < len; r++) {
+        if (c[s][r] >= 2) {
+          c[s][r] -= 2;
+          var ok = allMeldsOK(c);
+          c[s][r] += 2;
+          if (ok) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function isSevenPairs(tiles) {
+    if (tiles.length !== 14) return false;
+    var c = toCounts(tiles), n = 0;
+    for (var si = 0; si < SUITS.length; si++) {
+      var arr = c[SUITS[si]];
+      for (var r = 0; r < arr.length; r++) if (arr[r] === 2) n++;
+    }
+    return n === 7;
+  }
+
+  /* 判断某家是否和牌；返回牌型名或 null */
+  function checkWin(player, extraTile) {
+    var tiles = player.hand.slice();
+    if (extraTile) tiles.push(extraTile);
+    var need = 4 - player.melds.length;
+    if (tiles.length !== need * 3 + 2) return null;
+    if (player.melds.length === 0 && isSevenPairs(tiles)) return "七对";
+    if (!isStandardWin(tiles, need)) return null;
+    // 额外牌型
+    var all = tiles.slice();
+    for (var i = 0; i < player.melds.length; i++) all = all.concat(player.melds[i].tiles);
+    var suits = {};
+    for (var k = 0; k < all.length; k++) suits[all[k].s] = 1;
+    var ks = Object.keys(suits);
+    if (ks.length === 1) return ks[0] === "z" ? "字一色" : "清一色";
+    var allTriplet = player.melds.every(function (m) { return m.type === "pong"; });
+    if (allTriplet) {
+      var c2 = toCounts(tiles), tri = true;
+      // （近似：手里剩下的牌也全是刻子/对子形态）
+      for (var si2 = 0; si2 < SUITS.length && tri; si2++) {
+        var arr = c2[SUITS[si2]];
+        for (var r2 = 0; r2 < arr.length; r2++) {
+          var v = arr[r2];
+          if (v !== 0 && v !== 2 && v !== 3) { tri = false; break; }
+        }
+      }
+      if (tri) return "碰碰胡";
+    }
+    return "屁胡";
+  }
+
+  /* ================================================================
+     3. 游戏状态
+     ================================================================ */
+  var players = [], wall = [], turn = 0, phase = "idle";
+  var pending = null;              // { tile, from } 待认领的打出的牌
+  var discardPile = [];            // { tile, by }
+  var hoverIdx = -1, selIdx = -1;
+  var result = null;               // { winner, type, self }
+  var msg = "";
+  var timers = [];
+  var started = false;
+
+  /* 谁被等待：{ seat, mode }  mode = "draw"（等出牌） / "none"
+     这份数据是联机的契约：客人端靠它判断自己能不能点牌 —— 不能只看 turn，
+     因为"轮到谁"和"谁被允许操作"在有人碰/吃的时候不是一回事。          */
+  var waitNow = { seat: -1, mode: "none" };
+  var claims = [];                 // 待询问队列，已按 胡>碰>吃、同级按座次 排好序
+  var claimDone = null;            // 整条队列问完都没人要牌时做什么
+
+  function after(sec, fn) { timers.push({ t: sec, fn: fn }); }
+  function clearTimers() { timers = []; }
+
+  /* ---- 视角/席位判定：单机我永远是 0 号；联机可能坐 0~3 任一位置 ---- */
+  function localSeat() { return online ? mySeat : 0; }
+  function isRemoteHuman(p) {
+    return !!(online && isHost && seats[p] && seats[p].pid !== myPid);
+  }
+  function setWait(seat, mode) { waitNow = { seat: seat, mode: mode }; }
+  function iAmdrawNow() {
+    return started && phase !== "over" && waitNow.seat === localSeat() && waitNow.mode === "draw";
+  }
+
+  function newPlayer(i, isAI, name) {
+    return { i: i, isAI: isAI, name: name, hand: [], melds: [], discards: [], pid: null, count: null };
+  }
+
+  function startGame() {
+    clearTimers();
+    wall = [];
+    // 数牌 108 张（万/筒/条 各 1-9 各 4 张）
+    for (var si = 0; si < 3; si++) for (var r = 1; r <= 9; r++) for (var k = 0; k < 4; k++) wall.push(makeTile(SUITS[si], r));
+    // 风牌 16 张（东南西北 各 4 张）；不含花牌（春夏秋冬 / 梅兰竹菊）
+    for (var zr = 1; zr <= 4; zr++) for (var zk = 0; zk < 4; zk++) wall.push(makeTile("z", zr));
+    // 洗牌
+    for (var i = wall.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = wall[i]; wall[i] = wall[j]; wall[j] = t;
+    }
+    // 联机时：房间里占了座的是人，空位由电脑代打。
+    // 单机时没有 seats（全 null），必须显式把 0 号位认成自己 ——
+    // 否则四家全变电脑，玩家就变成"看四个 CPU 打牌"了。
+    var dirName = ["下方", "右家", "对家", "左家"];
+    players = [];
+    for (var p = 0; p < 4; p++) {
+      var s = (online && seats[p]) ? seats[p] : null;
+      var meHere = !online && p === 0;              // 单机：我固定坐 0 号（下方）
+      var pl = (s || meHere)
+        ? newPlayer(p, false, s ? s.name : "你")
+        : newPlayer(p, true, "电脑·" + dirName[p]);
+      if (s) pl.pid = s.pid;
+      players.push(pl);
+    }
+    for (var n = 0; n < 13; n++) for (var q = 0; q < 4; q++) players[q].hand.push(wall.pop());
+    for (var s2 = 0; s2 < 4; s2++) sortHand(players[s2].hand);
+    discardPile = []; pending = null; result = null; selIdx = -1; hoverIdx = -1;
+    claims = []; claimReq = null; claimDone = null; setWait(-1, "none");
+    turn = 0;
+    // ★ 必须重置 phase：上一局结束时它是 "over"，不清掉的话 beginTurn→toDiscard
+    //   第一行就 return，庄家摸完牌直接卡死（点手牌没反应、提示条停在旧 msg）。
+    phase = "idle";
+    pendingFrom = 0;
+    started = true;
+    msg = "开局 —— 庄家先摸牌";
+    beginTurn(0);
+  }
+
+  function nextOf(p) { return (p + 1) % 4; }
+
+  function beginTurn(p) {
+    turn = p;
+    if (wall.length <= 0) { endGame(-1, "流局"); return; }
+    var pl = players[p];
+    pl.hand.push(wall.pop());
+    sortHand(pl.hand);
+    // 自摸：所有人一视同仁地走询问流程，Humans 才会弹按钮 / 远程才会被等待
+    var wt = checkWin(pl);
+    if (wt) {
+      msg = pl.name + "摸牌…";
+      claimDone = function () { toDiscard(p, true); };
+      claims = [{ seat: p, tokens: [{ t: "zimo", y: wt }, { t: "pass" }] }];
+      phase = "claim";
+      pumpClaims();
+      return;
+    }
+    toDiscard(p, true);
+  }
+
+  /* 进入出牌阶段：CPU 自动打；远程人类等消息；本地人类等点击 */
+  function toDiscard(p, drew) {
+    if (phase === "over") return;
+    var pl = players[p];
+    if (pl.isAI) {
+      phase = "ai"; setWait(-1, "none");
+      after(0.55, function () { aiDiscard(p); });
+    } else if (isRemoteHuman(p)) {
+      phase = "wait"; setWait(p, "draw");
+      msg = "等待 " + pl.name + " 出牌…";
+    } else {
+      phase = drew ? "mydraw" : "mydiscard";
+      setWait(p, "draw"); selIdx = -1;
+      // 不写 msg：这句提示由 tipText() 按视角生成，
+      // 写进 msg 会被广播出去，让客人也看到"轮到你了"。
+      msg = "";
+    }
+    sync();
+  }
+
+  function discard(p, idx) {
+    var pl = players[p];
+    var t = pl.hand.splice(idx, 1)[0];
+    if (!t) return;
+    pl.discards.push(t);
+    discardPile.push({ tile: t, by: p });
+    sortHand(pl.hand);
+    hideActs();
+    claimReq = null;
+    pending = { tile: t, from: p };
+    phase = "claim";
+    setWait(-1, "none");
+    msg = pl.name + "打出 " + label(t);
+    after(0.35, askAll);
+    sync();
+  }
+
+  /* ---- 碰 / 吃 / 胡 的判定 ---- */
+  function canPong(pl, t) {
+    var n = 0;
+    for (var i = 0; i < pl.hand.length; i++) if (pl.hand[i].s === t.s && pl.hand[i].r === t.r) n++;
+    return n >= 2;
+  }
+  function chiOptions(pl, t) {
+    var res = [];
+    if (isHonor(t)) return res;              // 风牌凑不成顺子，不能吃
+    var pairs = [[t.r - 2, t.r - 1], [t.r - 1, t.r + 1], [t.r + 1, t.r + 2]];
+    for (var k = 0; k < pairs.length; k++) {
+      var a = pairs[k][0], b = pairs[k][1];
+      if (a < 1 || b > 9) continue;
+      var ia = -1, ib = -1;
+      for (var i = 0; i < pl.hand.length; i++) {
+        if (pl.hand[i].s !== t.s) continue;
+        if (ia < 0 && pl.hand[i].r === a) ia = i;
+        else if (ib < 0 && pl.hand[i].r === b) ib = i;
+      }
+      if (ia >= 0 && ib >= 0) res.push({ a: a, b: b, ia: ia, ib: ib, seq: [a, t.r, b] });
+    }
+    return res;
+  }
+  function canHuOn(pl, t) { return checkWin(pl, t); }
+
+  function takeFromHand(pl, s, r, n) {
+    var got = [];
+    for (var i = pl.hand.length - 1; i >= 0 && got.length < n; i--) {
+      if (pl.hand[i].s === s && pl.hand[i].r === r) got.push(pl.hand.splice(i, 1)[0]);
+    }
+    return got;
+  }
+
+  /* ================================================================
+     3.5 询问队列（内置并发动画）
+     打出一张牌后可能有好几家要认领。旧代码用三个函数互相递归来处理，
+     只能应付"除了我全是 CPU"；现在改成一条队列：
+       CPU 立即决策 → 本地人类弹按钮 → 远程人类由房主广播 claim 等他回消息
+     队列里每一项是 { seat, tokens }，tokens 已按 胡/自摸 > 碰 > 吃 > 过 排好。
+     ================================================================ */
+  function aiChoose(seat, tokens) {
+    for (var i = 0; i < tokens.length; i++) {
+      var tk = tokens[i];
+      if (tk.t === "hu" || tk.t === "zimo") return tk;          // 能和就和
+      if (tk.t === "pong" && aiWantsPong(seat)) return tk;
+      if (tk.t === "chi" && aiWantsChi(seat)) return tk;
+    }
+    return { t: "pass" };
+  }
+
+  function askAll() {
+    if (!pending || phase === "over") return;
+    var t = pending.tile, from = pending.from, d, q;
+    claims = [];
+
+    // ① 胡：谁离打牌者近谁优先（d 从 1 开始，天然按下家→对家→上家排序）
+    var huSeats = [];
+    for (d = 1; d < 4; d++) {
+      q = (from + d) % 4;
+      var wt = canHuOn(players[q], t);
+      if (wt) huSeats.push([q, wt]);
+    }
+    if (huSeats.length) {
+      for (var h = 0; h < huSeats.length; h++) {
+        claims.push({ seat: huSeats[h][0], tokens: [{ t: "hu", y: huSeats[h][1] }, { t: "pass" }] });
+      }
+      claimDone = nextTurn;
+      pumpClaims();
+      return;
+    }
+
+    // ② 碰（含"同一个人既能碰又能吃"的合并按钮）→ ③ 吃（仅下家）
+    var nx = nextOf(from);
+    var chiOpts = chiOptions(players[nx], t);
+    for (d = 1; d < 4; d++) {
+      q = (from + d) % 4;
+      if (!canPong(players[q], t)) continue;
+      var toks = [{ t: "pong" }];
+      if (q === nx) {
+        for (var c = 0; c < chiOpts.length; c++) toks.push({ t: "chi", a: chiOpts[c].a, b: chiOpts[c].b, r: t.r });
+      }
+      toks.push({ t: "pass" });
+      claims.push({ seat: q, tokens: toks });
+    }
+    if (chiOpts.length && !claims.some(function (x) { return x.seat === nx; })) {
+      // 下家碰不了但能吃 —— 风牌是没有 a<1||b>9 之外的选项的，所以到这里必然是数牌
+      var toks2 = [];
+      for (var c2 = 0; c2 < chiOpts.length; c2++) toks2.push({ t: "chi", a: chiOpts[c2].a, b: chiOpts[c2].b, r: t.r });
+      toks2.push({ t: "pass" });
+      claims.push({ seat: nx, tokens: toks2 });
+    }
+    claimDone = nextTurn;
+    pumpClaims();
+  }
+
+  function pumpClaims() {
+    hideActs();
+    if (phase === "over") { claims = []; claimReq = null; return; }
+    while (claims.length) {
+      var c = claims[0];
+      var pl = players[c.seat];
+      if (!pl) { claims.shift(); continue; }
+
+      if (pl.isAI) {                                   // CPU：当场算完，不占时间片
+        claims.shift();
+        var tk0 = aiChoose(c.seat, c.tokens);
+        if (tk0.t !== "pass") { applyAct(c.seat, tk0); return; }
+        continue;
+      }
+      if (online && isHost && c.seat !== mySeat) {     // 远程人类：广播上去等他点
+        claims.shift();
+        claimReq = { seat: c.seat, tokens: c.tokens };
+        phase = "waitclaim";
+        msg = "等待 " + pl.name + " 决定是否要这张牌…";
+        sync();
+        return;
+      }
+      claims.shift();                                  // 本地人类：弹按钮
+      claimReq = { seat: c.seat, tokens: c.tokens };
+      showActs(tokensToButtons(c.seat, c.tokens));
+      return;
+    }
+    // 队列见底：按约定收尾（打牌后没人要 → 下家摸牌；自摸点了过 → 该自己出牌）
+    claimReq = null;
+    if (claimDone) { var f = claimDone; claimDone = null; f(); }
+    else nextTurn();
+  }
+
+  function doPong(q) {
+    var t = pending.tile, from = pending.from;
+    var pl = players[q];
+    var got = takeFromHand(pl, t.s, t.r, 2);
+    pl.melds.push({ type: "pong", tiles: got.concat([t]), from: from });
+    sortHand(pl.hand);
+    finishClaim(q, "碰");
+  }
+
+  function doChi(q, o) {
+    var t = pending.tile, from = pending.from;
+    var pl = players[q];
+    var got = takeFromHand(pl, t.s, o.a, 1).concat(takeFromHand(pl, t.s, o.b, 1));
+    // 刚上（吃）的那张放最后：副露从左到右 = 手牌 a、手牌 b、上的牌，
+    // 一眼能看出刚上的是什么（原来 [t].concat(got) 把上的牌排最左，混在手牌里看不出来）
+    pl.melds.push({ type: "chi", tiles: got.concat([t]), from: from });
+    sortHand(pl.hand);
+    finishClaim(q, "吃");
+  }
+
+  function finishClaim(q, what) {
+    // 先把 from 取出来再用，别依赖外部那个 pendingFrom（容易和 pending 不同步）
+    var from = pending ? pending.from : pendingFrom;
+    pending = null;
+    discardPile.pop();                       // 被吃/碰走的牌不再留在牌河
+    if (players[from]) players[from].discards.pop();
+    hideActs();
+    turn = q;
+    msg = players[q].name + " " + what;
+    toDiscard(q, false);                     // 碰/吃之后不能再摸牌，直接打
+  }
+
+  var pendingFrom = 0;
+  function rememberFrom(p) { pendingFrom = p; }
+
+  function nextTurn() {
+    pending = null;
+    hideActs();
+    claims = []; claimReq = null; claimDone = null;
+    beginTurn(nextOf(turn));
+  }
+
+  function doWin(q, type, self) {
+    hideActs();
+    pending = null;
+    claims = []; claimReq = null; claimDone = null;
+    endGame(q, type, self);
+  }
+
+  function endGame(winner, type, self) {
+    phase = "over";
+    result = { winner: winner, type: type, self: !!self };
+    claims = []; claimReq = null; claimDone = null;
+    setWait(-1, "none");
+    if (winner < 0) msg = "流局 —— 牌墙摸完了";
+    else msg = players[winner].name + (self ? " 自摸 " : " 胡牌 ") + "· " + type + "！";
+    clearTimers();
+    sync();
+  }
+
+  /* ================================================================
+     4. 电脑玩家
+     ================================================================ */
+  function aiWantsPong(q) {
+    var pl = players[q];
+    if (pl.melds.length < 3) return true;
+    return Math.random() < 0.4;
+  }
+  function aiWantsChi(q) {
+    var pl = players[q];
+    if (pl.melds.length >= 3) return false;
+    return Math.random() < 0.6;
+  }
+
+  /* 每张牌的"有用程度"，越低越该打 */
+  function tileValue(pl, t) {
+    var c = toCounts(pl.hand);
+    var v = 0;
+    var same = c[t.s][t.r - 1];
+    v += (same - 1) * 7;                                   // 对子/刻子很有价值
+    if (isHonor(t)) return v - 0.4;                          // 风牌没有搭子价值，只有成刻才有用
+    for (var d = -2; d <= 2; d++) {
+      if (d === 0) continue;
+      var r = t.r + d;
+      if (r < 1 || r > 9) continue;
+      var n = c[t.s][r - 1];
+      if (n > 0) v += (Math.abs(d) === 1 ? 3.2 : 1.5);
+    }
+    // 幺九偏孤立时先打
+    if (t.r === 1 || t.r === 9) v -= 0.8;
+    return v;
+  }
+
+  function aiDiscard(p) {
+    if (phase === "over") return;
+    var pl = players[p];
+    // 自摸先检查
+    var wt = checkWin(pl);
+    if (wt) { doWin(p, wt, true); return; }
+    var best = 0, bv = Infinity;
+    for (var i = 0; i < pl.hand.length; i++) {
+      var v = tileValue(pl, pl.hand[i]);
+      if (v < bv) { bv = v; best = i; }
+    }
+    rememberFrom(p);
+    discard(p, best);
+  }
+
+  /* ================================================================
+     5. 动作按钮
+     ================================================================ */
+  function showActs(list) {
+    hideVoice();                                 // 别让语音面板盖住碰/吃/胡按钮
+    var box = $("acts");
+    box.innerHTML = "";
+    list.forEach(function (a) {
+      var b = document.createElement("button");
+      b.textContent = a.text;
+      if (a.cls) b.className = a.cls;
+      b.addEventListener("click", function (e) { e.preventDefault(); a.fn(); });
+      box.appendChild(b);
+    });
+    box.classList.remove("hidden");
+  }
+  function hideActs() { $("acts").classList.add("hidden"); $("acts").innerHTML = ""; }
+
+  /* ================================================================
+     5.5 联机（MQTT 公共中继，房主权威）
+     静态站没有后端，用公共 MQTT 当传输：
+       mjroom/<房间码>/state      房主 → 所有人：公开状态（含各家手牌数、副露、弃牌、轮到谁）
+       mjroom/<房间码>/hand/<座>  房主 → 该座玩家：自己的手牌（私密，别人收不到自己的）
+       mjroom/<房间码>/act       玩家 → 房主：出牌 / 碰吃胡过
+       mjroom/<房间码>/join|leave 进出房间
+     只有房主跑游戏逻辑，其他人只渲染 —— 没有服务端，这是唯一能保证状态一致的做法。
+     ⚠ 公共中继上的数据任何人都能订（知道房间码即可），别当正式对战平台用。
+     ================================================================ */
+  var online = false, isHost = true, mySeat = 0, roomCode = "", myName = "我", myPid = "";
+  var wallCount = 0;                 // 客人端：牌墙剩余（numeric）
+  var claimReq = null;               // { seat, tokens }  正在等谁做决定
+  var seats = [null, null, null, null];
+  var stateVer = 0;
+  var reveal = null;                 // 结算时房主公开的四家手牌
+  var netStEl = null;
+  var MQTT_URLS = ["wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt"];
+  var MQTT_SRC = ["https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js",
+                  "https://cdn.jsdelivr.net/npm/mqtt@5.3.5/dist/mqtt.min.js"];
+
+  function netSt(html) { if (netStEl) netStEl.innerHTML = html; }
+
+  function loadMqtt(cb) {
+    if (window.mqtt) { cb(true); return; }
+    var i = 0;
+    (function next() {
+      if (i >= MQTT_SRC.length) { cb(false); return; }
+      var s = document.createElement("script");
+      s.src = MQTT_SRC[i++];
+      s.onload = function () { cb(!!window.mqtt); };
+      s.onerror = next;
+      document.head.appendChild(s);
+    })();
+  }
+
+  var Net = { cli: null, ready: false };
+
+  function netPub(suffix, obj, retain) {
+    if (!Net.cli || !Net.ready) return;
+    try {
+      Net.cli.publish("mjroom/" + roomCode + "/" + suffix,
+                      JSON.stringify(obj), { qos: 0, retain: !!retain });
+    } catch (e) {}
+  }
+
+  function netConnect(onUp) {
+    var k = 0, everConnected = false;
+    function tryUrl() {
+      if (k >= MQTT_URLS.length) {
+        netSt("连不上中继（网络或 CDN 被拦）。可以先用单机模式。");
+        return;
+      }
+      var url = MQTT_URLS[k++];
+      var cli;
+      try {
+        cli = window.mqtt.connect(url, {
+          clientId: "mj_" + roomCode + "_" + myPid, clean: true,
+          reconnectPeriod: 4000, connectTimeout: 9000, keepalive: 30
+        });
+      } catch (e) { tryUrl(); return; }
+      Net.cli = cli;
+      cli.on("connect", function () {
+        everConnected = true; Net.ready = true;
+        var base = "mjroom/" + roomCode + "/";
+        cli.subscribe([base + "state", base + "hand/+", base + "act",
+                       base + "join", base + "leave", base + "voice"], { qos: 0 });
+        if (onUp) onUp();
+      });
+      cli.on("message", function (topic, buf) {
+        var sfx = topic.slice(("mjroom/" + roomCode + "/").length);
+        var d = null;
+        try { d = JSON.parse(buf.toString()); } catch (e) { return; }
+        netOnMsg(sfx, d);
+      });
+      cli.on("close", function () { Net.ready = false; });
+      cli.on("error", function () { if (!everConnected) { try { cli.end(true); } catch (e) {} tryUrl(); } });
+    }
+    tryUrl();
+  }
+
+  function serTile(t) { return t.s + t.r; }
+  function deTile(v) { return { s: String(v).charAt(0), r: parseInt(String(v).slice(1), 10) }; }
+  function handCount(p) {
+    var pl = players[p];
+    if (!pl) return 0;
+    return (pl.count != null) ? pl.count : pl.hand.length;
+  }
+  function wallLeft() { return (online && !isHost) ? wallCount : wall.length; }
+
+  /* ---- 房主：节流广播。状态每帧都可能变，不能每帧 publish，
+          所以改动点只打标记（sync），真正发送在主循环里限流执行 ---- */
+  var lastBcast = 0, needSync = false;
+  function sync() { needSync = true; }
+  function tickSync() {
+    if (!online || !isHost) return;
+    if (needSync && Date.now() - lastBcast >= 70) { needSync = false; bcast(); }
+  }
+
+  function bcast() {
+    if (!online || !isHost) return;
+    lastBcast = Date.now();
+    var st = {
+      v: ++stateVer, turn: turn, phase: phase, msg: msg, wall: wall.length,
+      wait: waitNow, started: started ? 1 : 0,
+      discards: discardPile.map(function (d) { return [serTile(d.tile), d.by]; }),
+      seats: seats.map(function (s) { return s ? s.pid : null; }),
+      names: seats.map(function (s) { return s ? s.name : null; }),
+      players: players.map(function (pl) {
+        return {
+          n: pl.name, ai: pl.isAI ? 1 : 0, pid: pl.pid || null,
+          hc: pl.hand.length,
+          m: pl.melds.map(function (mm) {
+            return { t: mm.type, f: mm.from, k: mm.tiles.map(serTile) };
+          })
+        };
+      }),
+      claim: claimReq, result: result,
+      reveal: (phase === "over") ? players.map(function (pl) { return pl.hand.map(serTile); }) : null
+    };
+    netPub("state", st, true);
+    for (var s = 0; s < 4; s++) {
+      if (seats[s] && seats[s].pid && players[s]) {
+        netPub("hand/" + s, players[s].hand.map(serTile), true);
+      }
+    }
+  }
+
+  /* ---- 客人：套用房主发来的状态 ---- */
+  function applyState(st) {
+    if (st.v && st.v < stateVer) return;
+    stateVer = st.v || stateVer;
+    turn = st.turn; phase = st.phase; msg = st.msg; wallCount = st.wall;
+    started = !!st.started;
+    waitNow = st.wait || { seat: -1, mode: "none" };
+    discardPile = (st.discards || []).map(function (d) { return { tile: deTile(d[0]), by: d[1] }; });
+    result = st.result || null;
+    claimReq = st.claim || null;
+    reveal = st.reveal || null;
+    // 座位表：谁坐在哪 + 叫什么
+    if (st.seats) {
+      for (var k = 0; k < 4; k++) {
+        if (!seats[k] || seats[k].pid !== st.seats[k]) {
+          seats[k] = st.seats[k] ? { pid: st.seats[k], name: (st.names && st.names[k]) || ("玩家" + (k + 1)) } : null;
+        } else if (st.names && st.names[k]) seats[k].name = st.names[k];
+      }
+    }
+    if (!players.length) {
+      players = [newPlayer(0, true, "电脑"), newPlayer(1, true, "电脑"),
+                 newPlayer(2, true, "电脑"), newPlayer(3, true, "电脑")];
+    }
+    for (var i = 0; i < 4; i++) {
+      var src = st.players[i], pl = players[i];
+      if (!pl || !src) continue;
+      pl.name = src.n; pl.isAI = !!src.ai; pl.pid = src.pid;
+      pl.melds = (src.m || []).map(function (mm) {
+        return { type: mm.t, from: mm.f, tiles: mm.k.map(deTile) };
+      });
+      if (i === mySeat) pl.count = src.hc;              // 自己的牌由 hand topic 给出
+      else { pl.hand = []; pl.count = src.hc; pl.aiExtra = null; }
+    }
+    for (var s = 0; s < 4; s++) if (st.seats && st.seats[s] === myPid) mySeat = s;
+    installCachedHand();
+    if (started && phase !== "over") $("ov").classList.add("hidden");
+    syncClaimUI();
+    seatUI();
+  }
+
+  /* retained 的 hand/<seat> 可能比 state 先到（那时还不知道自己坐哪），
+     所以先缓存，确定座位后再补装 —— 否则客人开局就看不见自己的牌。 */
+  var handCache = {};
+  function installCachedHand() {
+    if (handCache[mySeat]) {
+      var arr = handCache[mySeat];
+      players[mySeat].hand = arr.map(deTile);
+      players[mySeat].count = arr.length;
+      sortHand(players[mySeat].hand);
+    }
+  }
+
+  function applyHand(seat, arr) {
+    handCache[seat] = arr;
+    if (seat !== mySeat || !players[seat]) return;
+    installCachedHand();
+  }
+
+  function netOnMsg(sfx, d) {
+    if (sfx === "state") { if (!isHost) applyState(d); return; }
+    if (sfx.indexOf("hand/") === 0) { if (!isHost) applyHand(parseInt(sfx.slice(5), 10), d); return; }
+    if (sfx === "voice") { onVoice(d); return; }   // 语音：房主客人一律都收都放
+    if (!isHost) return;                       // 其余只有房主处理
+    if (sfx === "join") { onJoin(d); return; }
+    if (sfx === "leave") { onLeave(d); return; }
+    if (sfx === "act") { onAct(d); return; }
+  }
+
+  function onJoin(d) {
+    if (!d || !d.pid) return;
+    for (var s = 0; s < 4; s++) if (seats[s] && seats[s].pid === d.pid) { seats[s].t = Date.now(); seatUI(); return; }
+    if (started && phase !== "over") { bcast(); return; }   // 开局后不再让新人进
+    for (var i = 0; i < 4; i++) {
+      if (!seats[i]) {
+        seats[i] = { pid: d.pid, name: (d.nick || ("玩家" + (i + 1))).slice(0, 8), t: Date.now() };
+        // 还没开局：席位直接换成人类；牌局没开始所以不存在"接管动画"问题
+        if (!started && players[i]) {
+          players[i].isAI = false; players[i].name = seats[i].name; players[i].pid = d.pid;
+        }
+        seatUI();
+        bcast();
+        return;
+      }
+    }
+  }
+
+  function onLeave(d) {
+    if (!d || !d.pid) return;
+    for (var i = 0; i < 4; i++) {
+      if (seats[i] && seats[i].pid === d.pid) {
+        seats[i] = null;
+        if (!started) {
+          takeOverByAI(i);
+        } else {
+          // 局中换人不合规（手牌已经发好了），这里交给电脑把这一局打完
+          takeOverByAI(i);
+        }
+        seatUI();
+        sync();
+        return;
+      }
+    }
+  }
+
+  function onAct(d) {
+    if (!d || !d.seat && d.seat !== 0) return;
+    if (d.seat < 0 || d.seat > 3) return;
+    var tk = d.tk;
+    if (!tk) return;
+    // 校验：出牌必须是轮到他出牌；碰吃胡必须是在回应发给他的那次询问
+    if (tk.t === "discard") {
+      if (!waitNow || waitNow.seat !== d.seat || waitNow.mode !== "draw") return;
+    } else {
+      if (!claimReq || claimReq.seat !== d.seat) return;
+    }
+    applyAct(d.seat, tk);
+  }
+
+  /* ---- 把动作描述变成按钮：房主直接执行，客人发回房主 ---- */
+  function tokenText(tk) {
+    if (tk.t === "hu") return "胡";
+    if (tk.t === "zimo") return "自摸胡";
+    if (tk.t === "pong") return "碰";
+    if (tk.t === "chi") return "吃 " + CN[tk.a] + CN[tk.r] + CN[tk.b];
+    return "过";
+  }
+  function tokensToButtons(seat, tokens) {
+    return tokens.map(function (tk) {
+      return {
+        text: tokenText(tk),
+        cls: tk.t === "hu" || tk.t === "zimo" ? "win" : (tk.t === "pass" ? "pass" : ""),
+        fn: function () {
+          if (online && !isHost) { hideActs(); netPub("act", { seat: seat, tk: tk }); }
+          else applyAct(seat, tk);
+        }
+      };
+    });
+  }
+
+  /* 有人跑了 / 掉线：这个位置交给电脑接管，牌局不能因为"等人"卡死 */
+  function takeOverByAI(i) {
+    if (!players[i]) return;
+    players[i].isAI = true;
+    players[i].name = "电脑·" + ["下方", "右家", "对家", "左家"][i];
+    players[i].pid = null;
+    if (phase === "over" || !started) { sync(); return; }
+    // 关键：如果正在等的人掉线了，立刻替他把流程走下去
+    if (waitNow && waitNow.seat === i) { setWait(-1, "none"); aiDiscard(i); return; }
+    if (claimReq && claimReq.seat === i) { claimReq = null; pumpClaims(); return; }
+    sync();
+  }
+
+  function escapeHTML(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[c];
+    });
+  }
+
+  /* 房间里的座位表 */
+  function seatUI() {
+    if (!online || !netStEl) return;
+    var html = "房间 <b>" + escapeHTML(roomCode) + "</b> · ";
+    for (var i = 0; i < 4; i++) {
+      var mine = seats[i] && seats[i].pid === myPid;
+      html += "<span class=\"seat" + (mine ? " mine" : "") + "\">" + i + "号 " +
+              (seats[i] ? escapeHTML(seats[i].name) : "<i>空·电脑</i>") + "</span>";
+    }
+    html += "<br>" + (isHost
+      ? "你是房主。人数够了就点最下面的按钮开局，没坐满的位置由电脑补上。"
+      : "等待房主开局…你坐在 <b>" + (mySeat < 0 ? "?" : mySeat) + "</b> 号位（画面里的下方）。");
+    netSt(html);
+  }
+
+  /* 客人端：根据 state.claim 显示/隐藏按钮 */
+  function syncClaimUI() {
+    if (!online || isHost) return;
+    if (claimReq && claimReq.seat === mySeat) {
+      showActs(tokensToButtons(mySeat, claimReq.tokens));
+    } else {
+      hideActs();
+    }
+  }
+
+  /* 真正执行一个动作（只在房主或单机下被调用） */
+  function applyAct(seat, tk) {
+    hideActs();
+    claimReq = null;
+    if (tk.t === "hu") { doWin(seat, tk.y || "屁胡", false); return; }
+    if (tk.t === "zimo") { doWin(seat, tk.y || "屁胡", true); return; }
+    if (tk.t === "pong") { doPong(seat); return; }
+    if (tk.t === "chi") { doChi(seat, { a: tk.a, b: tk.b }); return; }
+    if (tk.t === "discard") {
+      var pl = players[seat], idx = -1;
+      for (var i = 0; i < pl.hand.length; i++) {
+        if (pl.hand[i].s === tk.s && pl.hand[i].r === tk.r) { idx = i; break; }
+      }
+      if (idx < 0) idx = tk.idx;
+      if (idx < 0 || idx >= pl.hand.length) return;
+      rememberFrom(seat);
+      discard(seat, idx);
+      return;
+    }
+    pumpClaims();                                 // 过 → 继续问队列里下一家
+  }
+
+  /* ---- 进出房间 ---- */
+  function genPid() {
+    return "p" + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+  }
+
+  function enterRoom(room, host) {
+    online = true; isHost = host; roomCode = room; mySeat = host ? 0 : -1;
+    myPid = genPid();
+    myName = ($("inName").value || "").trim().slice(0, 8) || (host ? "房主" : "玩家");
+    $("roomtag").classList.add("on");
+    $("roomcode").textContent = room;
+    $("bLeave").style.display = "";
+    netStEl = $("netSt");
+    netSt("正在连接中继…");
+
+    loadMqtt(function (ok) {
+      if (!ok) { netSt("mqtt.js 加载失败（CDN 被拦）。可以先用单机模式。"); return; }
+      netConnect(function () {
+        netPub("join", { pid: myPid, nick: myName }, true);
+        seatUI();
+        if (host) {
+          seats[0] = { pid: myPid, name: myName, t: Date.now() };
+          $("bStart").textContent = "开始对局（空位由电脑补上）";
+          seatUI();
+        } else {
+          $("bStart").textContent = "等待房主开始…";
+          $("bStart").disabled = true;
+        }
+      });
+      // 心跳：客人一直喊到被安排座位；房主定期重播状态，让晚进来的人也能同步
+      var beat = setInterval(function () {
+        if (!online) { clearInterval(beat); return; }
+        // 客人每次心跳都报名（=保活），房主靠它判断谁掉线了
+        if (!isHost) netPub("join", { pid: myPid, nick: myName }, true);
+        if (isHost && started && Date.now() - lastBcast > 1800) bcast();
+        // 长时间没有回应的人（掉线/关标签页）交还给电脑
+        if (isHost && started) {
+          var now = Date.now();
+          for (var i = 0; i < 4; i++) {
+            if (!seats[i] || !players[i] || players[i].isAI) continue;
+            if (seats[i].pid === myPid) { seats[i].t = now; continue; }
+            if (now - (seats[i].t || 0) > 12000) { takeOverByAI(i); seats[i] = null; seatUI(); }
+          }
+        }
+      }, 2500);
+    });
+    window.addEventListener("beforeunload", function () {
+      if (online) netPub("leave", { pid: myPid });
+    });
+  }
+
+  function leaveRoom() {
+    if (online) netPub("leave", { pid: myPid });
+    online = false; isHost = true; mySeat = 0; roomCode = ""; seats = [null, null, null, null];
+    $("roomtag").classList.remove("on");
+    $("bLeave").style.display = "none";
+    location.reload();
+  }
+
+  /* ================================================================
+     6. 渲染
+     ================================================================ */
+  var cv = $("cv"), ctx = cv.getContext("2d");
+  var scale = 1, offX = 0, offY = 0, dpr = 1;
+  var statEl = null;                     // 顶栏那行「牌墙 / 已打」文字
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var cw = window.innerWidth, ch = window.innerHeight;
+    scale = Math.min(cw / W, ch / H) * 0.97;
+    offX = (cw - W * scale) / 2;
+    offY = (ch - H * scale) / 2;
+    cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+    cv.style.width = cw + "px"; cv.style.height = ch + "px";
+  }
+  window.addEventListener("resize", resize);
+
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  var TILE_W = 58, TILE_H = 80;
+
+  /* ----------------------------------------------------------------
+     真实牌模图集
+     牌面来自 3D 打印级 STL（离线渲染成一张 928×640 的精灵图，见 mj_render.py）。
+     为什么不用 3D：源文件 76 个 STL 解压 129MB，网页塞进去必卡死；
+     离线渲成图后只有几十 KB，还保留了雕刻质感。
+     图集顺序：万1-9 / 筒1-9 / 条1-9 / 东南西北 / 背面
+     ---------------------------------------------------------------- */
+  var CELL_W = 116, CELL_H = 160, ACOLS = 8;
+  var SUIT_BASE = { w: 0, t: 9, b: 18, z: 27 };
+  var BACK_IDX = 31;
+  var ATLAS = null;
+  (function () {
+    var img = new Image();
+    img.onload = function () { ATLAS = img; };
+    img.onerror = function () { ATLAS = null; };      // 加载失败就退回手绘
+    img.src = "assets/tiles.png?v=2";   // v2：浮雕上色版，对比度更高
+  })();
+
+  function atlasCell(idx) {
+    return [(idx % ACOLS) * CELL_W, Math.floor(idx / ACOLS) * CELL_H];
+  }
+  function atlasIndex(t) {
+    var b = SUIT_BASE[t.s];
+    return (b === undefined) ? -1 : b + (t.r - 1);
+  }
+  function drawFace(x, y, w, h, idx) {
+    var c = atlasCell(idx);
+    ctx.drawImage(ATLAS, c[0], c[1], CELL_W, CELL_H, x, y, w, h);
+  }
+
+  function drawTileBack(x, y, w, h) {
+    if (ATLAS) {
+      drawFace(x, y, w, h, BACK_IDX);
+      // 背面统一压一层绿，跟牌桌呼应，也和翻开的牌区分开
+      ctx.fillStyle = "rgba(12,58,38,.42)"; rr(x, y, w, h, 5); ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 1.2;
+      rr(x, y, w, h, 5); ctx.stroke();
+      return;
+    }
+    ctx.fillStyle = "#1f6b46"; rr(x, y, w, h, 5); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.10)"; rr(x + 4, y + 4, w - 8, h - 8, 3); ctx.fill();
+  }
+
+  function drawTile(x, y, w, h, t, opt) {
+    opt = opt || {};
+    if (!t) { drawTileBack(x, y, w, h); return; }
+
+    if (ATLAS) {                                   // 有模型就贴模型
+      var idx = atlasIndex(t);
+      if (idx >= 0) {
+        if (opt.dim) ctx.globalAlpha = 0.82;
+        drawFace(x, y, w, h, idx);
+        ctx.globalAlpha = 1;
+        return;
+      }
+    }
+    // 牌面
+    ctx.fillStyle = opt.dim ? "#e6e2d4" : "#fbf6e6";
+    rr(x, y, w, h, 5); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.32)"; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = "rgba(0,0,0,.06)"; rr(x + 2, y + h - 9, w - 4, 7, 3); ctx.fill();
+
+    var pad = Math.max(4, w * 0.13);
+    var ix = x + pad, iy = y + pad, iw = w - pad * 2, ih = h - pad * 2 - 4;
+    var pos = POS[t.r] || [];
+
+    if (t.s === "t") {                              // 筒：圆点
+      ctx.fillStyle = "#1c4f8a";
+      for (var i = 0; i < pos.length; i++) {
+        ctx.beginPath();
+        ctx.arc(ix + pos[i][0] * iw, iy + pos[i][1] * ih, Math.min(iw, ih) * 0.13, 0, 6.29);
+        ctx.fill();
+      }
+    } else if (t.s === "b") {                       // 条：竖条
+      ctx.fillStyle = "#1d6b3a";
+      var bw = Math.max(2, iw * 0.09), bh = ih * 0.19;
+      for (var j = 0; j < pos.length; j++) {
+        var px = ix + pos[j][0] * iw, py = iy + pos[j][1] * ih;
+        rr(px - bw / 2, py - bh / 2, bw, bh, bw / 2); ctx.fill();
+      }
+    } else if (t.s === "w") {                      // 万：汉字 + 萬
+      ctx.fillStyle = "#8e2b22";
+      ctx.font = "bold " + Math.round(ih * 0.5) + "px 'PingFang SC','Microsoft YaHei',serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(CN[t.r], x + w / 2, y + h * 0.36);
+      ctx.font = "bold " + Math.round(ih * 0.34) + "px 'PingFang SC','Microsoft YaHei',serif";
+      ctx.fillText("萬", x + w / 2, y + h * 0.66);
+    } else {                                        // 风牌：东南西北
+      ctx.fillStyle = "#1f3f8a";
+      ctx.font = "bold " + Math.round(ih * 0.62) + "px 'PingFang SC','Microsoft YaHei',serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(WIND[t.r], x + w / 2, y + h * 0.46);
+    }
+  }
+
+  /* ================================================================
+     语音（斗地主音效板素材）：点一句就放，联机时全桌都能听到
+     —— 素材来源 jarryherr.github.io/doudizhu-soundboard，已本地化到 assets/snd/
+     ================================================================ */
+  var SND_TABS = [
+  { k: "c", n: "嘴强王者", items: [
+    ["v0088","再见啦 俺会想念大家嘞"],["v0089","怎么又断线了网络怎么这么差呀"],["v0090","相信相信的力量"],["v0091","你们走吧我留下"],
+    ["v0092","我能怎么办 我也很绝望啊"],["v0093","这一手牌有毒啊"],["v0094","好好好好好好"],["v0095","我信你个鬼"],
+    ["v0096","哈哈哈抱歉"],["v0097","快点啊 都等得我花儿都谢了"],["v0098","不能让他一个人走"],["v0099","等等 我来一个朋友"],
+    ["v0100","啊 馋哭了呀"],["v0101","溜了溜了 下次再约"],["v0102","我不可能输 决战到底"],["v0103","心态崩了呀"],
+    ["v0104","一起走谁都没有"],["v0105","朋友一生 一起走"],["v0106","您的牌打得也忒好了呀"],["v0107","我要走了别跟我抢"],
+    ["v0108","再来一张"],["v0109","诶搞快点搞快点"],["v0110","手抖了不好意思啊"],["v0111","诶 各位 真是不好意思啊 我得离开一会儿啊"],
+    ["v0112","遥遥领先"],["v0113","就这"],["v0114","怎么还没人走"],["v0115","准备准备 打牌啦"],
+    ["v0116","不要吵了不要吵了 吵啥呢吵么 专心玩游戏吧"],["v0117","不要走 决战到天亮啦"],["v0118","大家好很高兴见到各位"],["v0119","老铁666啊"],
+    ["v0120","咱交个朋友吧能告诉我你咋练习了吗"],["v0121","这谁顶得住啊"],["v0122","哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒哒"],["v0123","我墙都不扶 就服你"],
+    ["v0124","十七张牌你能秒我"],["v0125","和你合作真是太愉快了啊"],["v0126","顶不住也要顶"],["v0127","你是MM还是GG"],
+    ["v0128","就这"],["v0129","拜拜了您呐"],["v0130","狭路相逢勇者胜"],["v0131","爱拼才会赢呀"],
+    ["v0132","心态崩了呀"],["v0133","选普通场"],["v0134","哎呀妈呀刚断了左手现在用右手斗地主"],["v0135","出对子"],
+    ["v0136","选新手场"],["v0137","顺牌给我 这局让我先走"],["v0138","选高级场"],["v0139","压他"],
+    ["v0140","准备准备"],["v0141","炸他"],["v0142","刷我滴卡"],["v0143","出三带"],
+    ["v0144","冷冷的狗粮在脸上胡乱地拍"],["v0145","这四百万是我最后的倔强"],["v0146","不要出 让我来"],["v0147","所以爱会消失的对吗"],
+    ["v0148","祝天下有情人 终成兄妹"],["v0149","出单牌"],["v0150","让他出"],["v0151","你继续玩吧 我溜了溜了"],
+    ["v0152","光棍节本人出租 打败唠嗑十豆一小时"],["v0153","老铁666"],["v0154","你豆子不够 快去充豆吧"],["v0155","出小牌 让我顺一手"],
+    ["v0001","老铁666啊"],["v0002","怎么还没人走"],["v0003","快点吧 我等的花都谢了"],["v0004","我墙都不扶就服你"],
+    ["v0005","我能怎么办我也很绝望啊"],["v0006","相信相信的力量"],["v0007","我信你个鬼"],["v0008","狭路相逢勇者胜"],
+    ["v0009","你是妹妹还是哥哥"],["v0010","拜拜了您嘞"],["v0011","十七张牌你能秒我"],["v0012","这一手牌有毒啊"],
+    ["v0013","我不可能输 决战到底"],["v0014","刷我滴卡"],["v0015","搞快点搞快点"],["v0016","爱拼才会赢啊"],
+    ["v0017","心态崩了呀"],["v0018","顶不住也要顶"],["v0019","各位 真不好意思 我要离开一会儿"],["v0020","再来一张"],
+    ["v0021","朋友一生一起走"],["v0022","祝天下有情人终成兄妹"],["v0023","就这"],["v0024","好好好好好好"],
+    ["v0025","心态崩了呀"],["v0026","就这"],["v0027","大家好 很高兴见到各位"],["v0028","准备准备 打牌喽"],
+    ["v0029","一起走谁都没有"],["v0030","啊 馋哭了呀"],["v0031","不能让他一个人走"],["v0032","光棍节本人出租 打败唠嗑十豆一小时"],
+    ["v0033","又断线了 网络怎么这么差"],["v0034","再见喽我会想念大家的"],["v0035","你们走吧我留下"],["v0036","手抖了 不好意思呀"],
+    ["v0037","我要走了别跟我抢"],["v0038","这谁顶得住啊"],["v0039","遥遥领先"],["v0040","冷冷的狗粮在脸上胡乱地拍"],
+    ["v0041","打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打打"],["v0042","和你合作真是太愉快了"],["v0043","这四百万是我最后的倔强"],["v0044","所以爱会消失的对吗"],
+    ["v0045","溜了溜了下次再约"],["v0046","哈哈哈抱歉喽"],["v0047","老铁666啊"],["v0048","不要吵了 有什么好吵的 专心玩游戏吧"],
+    ["v0049","我们家的朋友吧能不能告诉我你的联系方法啊"],["v0050","你的牌打的太好了"],["v0051","等等我拉一个朋友"],["v0052","不要走 决战到天亮"],
+    ["v0053","出三带"],["v0054","贴"],["v0055","压他"],["v0056","王炸在手天下我有"],
+    ["v0057","让他出"],["v0058","没有上不去的段位 只有不努力的打牌人"],["v0059","刚剁了左手 现在用右手斗地主"],["v0060","为什么这么多人加我好友学技术 明明我打牌一般呢"],
+    ["v0061","炸他"],["v0062","先普通长"],["v0063","贴牌"],["v0064","Boom Shakalaka"],
+    ["v0065","三天三夜 三更半夜 打牌不要停歇"],["v0066","早安打工人"],["v0067","你豆子不够 快去充豆吧"],["v0068","你继续玩吧我溜了溜了"],
+    ["v0069","出对子"],["v0070","贴"],["v0071","最近才知道欢乐斗是要花钱买的以前啊都是管家给我冲的"],["v0072","出效牌 让我删一手"],
+    ["v0073","顺牌给我这局让我先走"],["v0074","今天搬砖你不狠 明天地位就不够稳"],["v0075","我的热情 好像一把火 忍受了整个沙漠"],["v0076","不要出让我来"],
+    ["v0077","选高级场"],["v0078","准备准备"],["v0079","请开始你的表演"],["v0080","出单牌"],
+    ["v0081","接着奏乐接着斗"],["v0082","打牌人打牌魂打牌都是人上人"],["v0083","真羡慕你们能领低保 我的豆一辈子都输不完"],["v0084","贴牌"],
+    ["v0085","打工人打工魂打工都是人上人"],["v0086","选新手场"],["v0087","大牌可以输王炸必须出"],
+  ] },
+  { k: "q", n: "快捷聊天", items: [
+    ["m017","快开局吧"],["m019","赢惯了，不知道该怎么输呢"],["m020","哎呦，不错哦"],["m021","信任是合作的第一步"],
+    ["m022","我先溜了，你们继续"],["m023","请打开麦克风交流"],["m024","你当然可以相信我"],["m025","我先溜了，你们继续"],
+    ["m026","我必胜"],["m027","加个好友，以后一起玩"],["m028","打得不错"],["m029","玩法不熟，换一个"],
+    ["m030","快开局吧"],["m032","这个姐姐预定了"],["m033","稳了，不知道怎么输"],["m034","加个好友，以后一起玩"],
+    ["m035","这不过是一场游戏罢了"],["m036","哇，打得不错"],["m037","请打开麦克风交流"],["m038","等等，我再拉个人"],
+    ["m039","听姐姐的，开他"],["m040","相信我，保证不骗你"],["m041","听我的，开他"],["m042","稳了 不知道怎么输"],
+    ["m043","加个好友，以后一起玩"],["m044","我放错牌了"],["m045","我先溜了，你们继续"],["m046","本少爷一定会赢的"],
+    ["m047","不如开我的吧"],["m049","这牌终将是我的"],["m050","搞快点，搞快点"],["m051","快开局吧"],
+    ["m052","打得不错"],["m053","等等，我再拉个人"],["m054","听我的，开他"],["m055","哎呦，不错哦"],
+    ["m056","动作快一点"],["m057","你认真的吗"],["m059","别和我抢"],["m060","请打开麦克风交流"],
+    ["m061","等等，我再拉个人"],["m062","快开局吧"],["m063","别给他，他要赢了"],["m064","请打开麦克风交流"],
+    ["m065","你看起来很可疑哦"],["m066","加个好友，以后一起玩"],["m067","这张牌我拿定了"],["m068","加个好友，以后一起玩"],
+    ["m069","我先溜了，你们继续"],["m071","请打开麦克风交流"],["m072","哎呦，不错啊"],["m073","我先溜了，你们继续"],
+    ["m074","给我 我是学生"],["m075","我的运气一向很好"],["m076","别开我呀"],["m077","等等，我再拉个人"],
+    ["m078","请打开麦克风交流"],["m079","这张牌不能给他"],["m080","开他 绝对有炸"],["m081","玩法不熟，换一个"],
+    ["m082","玩法不熟，换一个"],["m083","相信我，保证不骗你"],["m084","在压力面前保持优雅"],["m085","我从不怀疑自己"],
+    ["m087","这事有点为难我小猪了"],["m088","保持微笑"],["m089","我先溜了，你们继续"],["m090","我已经锁定胜局"],
+    ["m091","不是吧，哥们"],["m092","想要的就得拿到手"],["m093","真的假的"],["m094","快开局吧"],
+    ["m095","等等，我再拉个人"],["m096","信我，我不骗人的"],["m097","别开我呀"],["m098","快开局吧"],
+    ["m099","玩法不熟，换一个"],["m100","给他上上强度"],["m101","搞快点，搞快点"],["m102","别让我久等"],
+    ["m103","幸运女神总会站在我身边"],["m104","加个好友，以后一起玩"],["m105","玩法不熟，换一个"],["m107","玩法不熟，换一个"],
+    ["m108","这张牌不能给他"],["m109","你在隐瞒什么"],["m110","兄弟 杀他的牌"],["m111","搞快点，搞快点"],
+    ["m112","我真的服了"],["m113","别开我呀"],["m114","等等，我再拉个人"],["m115","这张牌我拿定了"],
+    ["m116","搞快点，搞快点"],["m117","中国人不骗中国人"],["m118","信我，这牌保真的"],
+  ] },
+  { k: "d", n: "对局口令", items: [
+    ["v0575","我先出"],["v0583","要不起"],["v0596","黑桃3先出"],["v0597","不出"],
+    ["v0599","我只剩两张牌"],["v0603","过"],["v0619","我只剩一张牌"],["v0621","方片3先出"],
+    ["v0627","不要"],["v0635","大你"],["v0636","压死"],["v0637","过"],
+    ["v0641","管上"],["v0714","方片3先出"],["v0715","黑桃3先出"],["v0720","过"],
+    ["v0723","要不起"],["v0732","压死"],["v0740","我先出"],["v0743","我只剩一张牌"],
+    ["v0748","贴牌"],["v0762","过"],["v0763","管上"],["v0768","我只剩两张牌"],
+    ["v0773","大你"],["v0779","不要"],["v0781","贴牌"],["v0785","不出"],
+  ] },
+];
+
+  var vpEl = null, vpBody = null, vpTab = "c";
+  var sndPool = [], sndIdx = 0;
+  var bubbles = [];                       // { seat, text, t0 } 正在显示的气泡
+
+  // 播放池：连点几句不会互相打断
+  (function () {
+    for (var i = 0; i < 6; i++) {
+      var a = new Audio();
+      a.preload = "auto";
+      sndPool.push(a);
+    }
+  })();
+
+  function playSnd(file) {
+    var a = sndPool[sndIdx = (sndIdx + 1) % sndPool.length];
+    try {
+      a.src = "assets/snd/" + file + ".mp3";
+      a.volume = 0.9;
+      var p = a.play();
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) {}
+  }
+
+  function pushBubble(seat, text) {
+    bubbles.push({ seat: seat, text: text, t0: performance.now() });
+    if (bubbles.length > 3) bubbles.shift();
+  }
+
+  function sendVoice(file, title) {
+    playSnd(file);
+    pushBubble(localSeat(), title);
+    if (online && Net.cli && Net.ready) {
+      netPub("voice", { pid: myPid, seat: localSeat(), f: file, t: title });
+    }
+  }
+
+  /* 收到别人的语音：播放 + 在他座位旁边冒个气泡 */
+  function onVoice(d) {
+    if (!d || !d.f) return;
+    if (d.pid && d.pid === myPid) return;            // 自己的回音（不会收到，兜底）
+    playSnd(d.f);
+    var seat = (typeof d.seat === "number") ? d.seat : -1;
+    if (seat >= 0 && players[seat]) pushBubble(seat, d.t || "");
+  }
+
+  function renderVoiceList() {
+    if (!vpBody) return;
+    var html = "";
+    for (var i = 0; i < SND_TABS.length; i++) {
+      if (SND_TABS[i].k !== vpTab) continue;
+      var items = SND_TABS[i].items;
+      for (var j = 0; j < items.length; j++) {
+        html += '<button data-f="' + items[j][0] + '" data-t="' +
+                items[j][1].replace(/"/g, "") + '">' + items[j][1] + '</button>';
+      }
+    }
+    vpBody.innerHTML = html;
+    vpBody.scrollTop = 0;
+    var tabs = document.querySelectorAll("#vp .vp-tab");
+    for (var k = 0; k < tabs.length; k++) {
+      tabs[k].classList.toggle("on", tabs[k].getAttribute("data-tab") === vpTab);
+    }
+  }
+
+  function showVoice() {
+    if (!vpEl) return;
+    vpEl.classList.remove("hidden");
+    renderVoiceList();
+  }
+  function hideVoice() { if (vpEl) vpEl.classList.add("hidden"); }
+  function toggleVoice() { if (!vpEl) return; vpEl.classList.contains("hidden") ? showVoice() : hideVoice(); }
+
+  (function bindVoice() {
+    vpEl = $("vp"); vpBody = $("vpBody");
+    $("bVoice").addEventListener("click", toggleVoice);
+    $("bVoiceClose").addEventListener("click", hideVoice);
+    var tabs = document.querySelectorAll("#vp .vp-tab");
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].addEventListener("click", function () {
+        vpTab = this.getAttribute("data-tab");
+        renderVoiceList();
+      });
+    }
+    // 事件委托：278 个按钮不用一个个绑
+    vpBody.addEventListener("click", function (ev) {
+      var b = ev.target;
+      while (b && b !== vpBody && b.tagName !== "BUTTON") b = b.parentNode;
+      if (!b || b === vpBody) return;
+      sendVoice(b.getAttribute("data-f"), b.getAttribute("data-t"));
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") hideVoice();
+    });
+  })();
+
+  /* 气泡：圆角框 + 小尾巴，2.8 秒后淡出 */
+  function drawBubble(cx, cy, text, alpha, slot) {
+    if (text.length > 14) text = text.slice(0, 13) + "…";
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = "bold 13px 'PingFang SC','Microsoft YaHei',sans-serif";
+    var tw = Math.min(240, ctx.measureText(text).width + 24), th = 27;
+    var x = cx - tw / 2, y = cy - th / 2;
+    ctx.fillStyle = "rgba(255,247,214,.97)";
+    ctx.strokeStyle = "rgba(0,0,0,.28)"; ctx.lineWidth = 1;
+    rr(x, y, tw, th, 9); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    if (slot === 0) { ctx.moveTo(cx - 6, y + th - 1); ctx.lineTo(cx + 6, y + th - 1); ctx.lineTo(cx, y + th + 8); }
+    else if (slot === 2) { ctx.moveTo(cx - 6, y + 1); ctx.lineTo(cx + 6, y + 1); ctx.lineTo(cx, y - 8); }
+    else if (slot === 3) { ctx.moveTo(x + tw - 1, cy - 6); ctx.lineTo(x + tw - 1, cy + 6); ctx.lineTo(x + tw + 8, cy); }
+    else { ctx.moveTo(x + 1, cy - 6); ctx.lineTo(x + 1, cy + 6); ctx.lineTo(x - 8, cy); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#3d3016";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(text, cx, cy + 1);
+    ctx.restore();
+  }
+
+  function drawBubbles(now) {
+    for (var i = bubbles.length - 1; i >= 0; i--) {
+      var b = bubbles[i];
+      var age = (now - b.t0) / 1000;
+      if (age > 2.8) { bubbles.splice(i, 1); continue; }
+
+      var slot = relOf(b.seat);
+
+      var cx, cy;
+      if (slot === 0) { cx = W / 2; cy = H - 122; }
+      else if (slot === 2) { cx = W / 2; cy = 96; }
+      else if (slot === 3) { cx = 118; cy = H / 2 - 130; }
+      else { cx = W - 118; cy = H / 2 - 130; }
+      drawBubble(cx, cy, b.text, age < 2.2 ? 1 : (2.8 - age) / 0.6, slot);
+    }
+  }
+
+  /* 所有渲染都按"我在下方"来做。联机时每个人坐的位置不同，
+     所以统一折算成相对方位：0=自己(下) 1=下家(右) 2=对家(上) 3=上家(左) */
+  function relOf(abs) { return (abs - localSeat() + 4) % 4; }
+  function tileCount(p) {
+    var pl = players[p];
+    if (!pl) return 0;
+    return (pl.hand && pl.hand.length) ? pl.hand.length : (pl.count || 0);
+  }
+
+  /* 提示条文案：必须按"我"的视角算，不能直接用 msg ——
+     msg 是房主写的事件文本，广播给客人后"轮到你了"就变成错的了。
+     所以轮到谁出牌 / 在等谁，一律由本地的 waitNow 推出来。 */
+  function tipText() {
+    if (!started) return msg || "点击开始";
+    if (phase !== "over") {
+      if (iAmdrawNow()) return phase === "mydiscard" ? "轮到你了 —— 打出一张牌" : "轮到你了 —— 点一张手牌打出去";
+      if (waitNow.seat >= 0 && waitNow.mode === "draw" && waitNow.seat !== localSeat() && players[waitNow.seat]) {
+        return "等待 " + players[waitNow.seat].name + " 出牌…";
+      }
+      if (claimReq && players[claimReq.seat]) {
+        // 被问的是自己 → 别写成"等待自己决定"，直接提示看按钮
+        if (claimReq.seat === localSeat()) return "这张牌你能要 —— 点下面的按钮，不要就点「过」";
+        return "等待 " + players[claimReq.seat].name + " 决定是否要这张牌…";
+      }
+    }
+    return msg;
+  }
+
+  /* 底部：我的手牌 + 副露 */
+  function drawMe() {
+    var pl = players[localSeat()];
+    if (!pl) return null;
+    var meldCount = pl.melds.length;
+    var slots = pl.hand.length + meldCount * 3 + meldCount;
+    var tw = Math.min(TILE_W, (W - 120) / Math.max(1, slots + 1));
+    var th = tw * (TILE_H / TILE_W);
+    var totalW = slots * tw;
+    var x0 = (W - totalW) / 2, y = H - th - 26;
+    var x = x0;
+    for (var i = 0; i < pl.hand.length; i++) {
+      var lift = (i === hoverIdx || i === selIdx) ? 12 : 0;
+      drawTile(x, y - lift, tw - 2, th, pl.hand[i]);
+      x += tw;
+    }
+    for (var m = 0; m < pl.melds.length; m++) {
+      x += tw * 0.35;
+      for (var k = 0; k < pl.melds[m].tiles.length; k++) {
+        drawTile(x, y + 6, tw * 0.78, th * 0.78, pl.melds[m].tiles[k]);
+        x += tw * 0.78;
+      }
+    }
+    return { x0: x0, y: y, tw: tw, th: th, count: pl.hand.length };
+  }
+
+  function drawOpp(abs) {
+    var pl = players[abs];
+    if (!pl) return;
+    var slot = relOf(abs);
+    if (slot === 0) return;                       // 那就是自己，画在底部
+    var vertical = (slot === 1 || slot === 3);
+    var tw = vertical ? 34 : 30;
+    var th = vertical ? 46 : 41;
+    var n = tileCount(abs), i;
+    if (slot === 2) {                             // 对家：横向，顶部
+      var x0 = (W - n * tw) / 2;
+      for (i = 0; i < n; i++) drawTile(x0 + i * tw, 26, tw - 2, th, null);
+      var mx = x0 + n * tw + 26;
+      for (i = 0; i < pl.melds.length; i++) {
+        for (var k = 0; k < pl.melds[i].tiles.length; k++) drawTile(mx, 30, tw * 0.7, th * 0.7, pl.melds[i].tiles[k]);
+        mx += tw * 0.7 * 3 + 8;
+      }
+    } else {                                      // 左右两家：竖向
+      var bx = (slot === 3) ? 26 : W - 26 - th;
+      var y0 = (H - n * tw) / 2 - 20;
+      for (i = 0; i < n; i++) {
+        drawTileBack(bx, y0 + i * tw, th, tw - 2);
+      }
+      var my = y0 + n * tw + 20;
+      for (i = 0; i < pl.melds.length; i++) {
+        for (var k2 = 0; k2 < pl.melds[i].tiles.length; k2++) drawTile(bx, my, th * 0.72, tw * 0.72, pl.melds[i].tiles[k2]);
+        my += tw * 0.72 * 3 + 6;
+      }
+    }
+    // 名字
+    ctx.font = "bold 13px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = (turn === abs && phase !== "over") ? "#ffd45b" : "rgba(234,245,238,.75)";
+    var nx, ny;
+    if (slot === 2) { nx = W / 2; ny = 16; }
+    else if (slot === 3) { nx = 26 + th / 2; ny = H / 2 + 150; }
+    else { nx = W - 26 - th / 2; ny = H / 2 + 150; }
+    var away = online && isHost && !players[abs].isAI && seats[abs] &&
+               Date.now() - (seats[abs].t || 0) > 12000;
+    ctx.fillText(pl.name + " (" + n + ")" + (away ? " ·掉线?" : ""), nx, ny);
+  }
+
+  /* 中央牌河 */
+  function drawDiscards() {
+    var cols = 8, tw = 36, th = 48;
+    var perRow = cols;
+    for (var i = 0; i < discardPile.length; i++) {
+      var d = discardPile[i];
+      var col = i % perRow, row = Math.floor(i / perRow);
+      var gx = W / 2 - (perRow * tw) / 2 + col * tw;
+      var gy = 216 + row * (th + 2);
+      drawTile(gx, gy, tw - 3, th - 3, d.tile, { dim: false });
+      // 所有者色标
+      ctx.fillStyle = ["#ffd45b", "#7fd1ff", "#ff9ec4", "#9ef0b8"][d.by];
+      rr(gx + (tw - 3) / 2 - 5, gy + th - 8, 10, 3, 1.5); ctx.fill();
+    }
+    // 最新一张高亮
+    if (discardPile.length) {
+      var li = discardPile.length - 1;
+      var lc = li % perRow, lr = Math.floor(li / perRow);
+      var lx = W / 2 - (perRow * tw) / 2 + lc * tw, ly = 216 + lr * (th + 2);
+      ctx.strokeStyle = "#ffd45b"; ctx.lineWidth = 2;
+      rr(lx - 2, ly - 2, tw + 1, th + 1, 4); ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+  }
+
+  function drawInfo() {
+    if (!statEl) statEl = $("stat");
+    if (statEl) {
+      var s = "牌墙 " + wallLeft() + " · 已打 " + discardPile.length;
+      if (online) s += " · " + (isHost ? "房主" : "客人") + " 房间 " + roomCode;
+      statEl.textContent = s;
+    }
+  }
+
+  function drawResult() {
+    if (!result) return;
+    ctx.fillStyle = "rgba(4,20,12,.86)"; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    var mine = result.winner === localSeat();
+    ctx.fillStyle = "#ffd45b";
+    ctx.font = "bold 44px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.fillText(result.winner < 0 ? "流局" : (mine ? "你赢了！" : "你输了"), W / 2, H / 2 - 90);
+    ctx.fillStyle = "#eaf5ee";
+    ctx.font = "bold 20px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.fillText(msg, W / 2, H / 2 - 34);
+
+    // 结算亮牌：房主会把四家的手牌一起广播出来
+    if (reveal && result.winner >= 0) {
+      var hand = reveal[result.winner] || [];
+      var tw = Math.min(52, Math.max(20, (W - 160) / Math.max(1, hand.length)));
+      var th = tw * (TILE_H / TILE_W);
+      var x0 = W / 2 - (hand.length * tw) / 2;
+      ctx.font = "13px 'PingFang SC','Microsoft YaHei',sans-serif";
+      ctx.fillStyle = "rgba(234,245,238,.65)";
+      ctx.fillText((players[result.winner] ? players[result.winner].name : "") + " 的手牌", W / 2, H / 2 + 4);
+      for (var i = 0; i < hand.length; i++) {
+        drawTile(x0 + i * tw, H / 2 + 18, tw - 2, th, deTile(hand[i]));
+      }
+    }
+    ctx.font = "14px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.fillStyle = "rgba(234,245,238,.7)";
+    ctx.fillText(isHost ? "点右上「重新开局」再来一局" : "等待房主重开…", W / 2, H / 2 + (reveal ? 96 : 24));
+  }
+
+  function render() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.translate(offX, offY);
+    ctx.scale(scale, scale);
+
+    // 桌面
+    var g = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.72);
+    g.addColorStop(0, "#12744a"); g.addColorStop(1, "#0b4229");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    if (!started) return null;
+    drawDiscards();
+    drawInfo();
+    var geo = drawMe();
+    drawOpp((localSeat() + 1) % 4);
+    drawOpp((localSeat() + 2) % 4);
+    drawOpp((localSeat() + 3) % 4);
+    drawBubbles(performance.now());
+    drawResult();
+    return geo;
+  }
+
+  /* ================================================================
+     7. 交互
+     ================================================================ */
+  var myGeo = null;
+
+  function toLogical(ev) {
+    var r = cv.getBoundingClientRect();
+    return { x: (ev.clientX - r.left - offX) / scale, y: (ev.clientY - r.top - offY) / scale };
+  }
+
+  function hitTile(p) {
+    if (!myGeo) return -1;
+    var pl = players[localSeat()];
+    if (!pl) return -1;
+    var x = p.x - myGeo.x0;
+    if (p.y < myGeo.y - 20 || p.y > myGeo.y + myGeo.th + 6) return -1;
+    var i = Math.floor(x / myGeo.tw);
+    if (i < 0 || i >= pl.hand.length) return -1;
+    return i;
+  }
+
+  cv.addEventListener("pointermove", function (ev) {
+    if (!iAmdrawNow()) { hoverIdx = -1; return; }
+    hoverIdx = hitTile(toLogical(ev));
+  });
+
+  cv.addEventListener("pointerdown", function (ev) {
+    if (!iAmdrawNow()) return;
+    var seat = localSeat();
+    var i = hitTile(toLogical(ev));
+    if (i < 0) return;
+    var pl = players[seat];
+    var t = pl.hand[i];
+    if (!t) return;
+    hideActs();
+    if (online && !isHost) {
+      // 客人没有牌权：把决定发给房主，房主执行后再把结果广播回来
+      netPub("act", { seat: mySeat, tk: { t: "discard", s: t.s, r: t.r, idx: i } });
+      return;
+    }
+    rememberFrom(seat);
+    discard(seat, i);
+  });
+
+  $("bStart").addEventListener("click", function () {
+    if (online && !isHost) return;                 // 客人点不动（按钮本来就是禁用的）
+    $("ov").classList.add("hidden");
+    startGame();
+  });
+  $("bRestart").addEventListener("click", function () {
+    if (online && !isHost) { msg = "只有房主可以重新开局"; return; }
+    if (started) startGame();
+  });
+  $("bSort").addEventListener("click", function () {
+    var pl = players[localSeat()];
+    if (pl) sortHand(pl.hand);
+  });
+  $("bLeave").addEventListener("click", leaveRoom);
+
+  /* ---- 创建 / 加入房间 ---- */
+  function randRoom() {
+    var s = "ABCDEFGHJKMNPQRSTUVWXYZ23456789", out = "";
+    for (var i = 0; i < 4; i++) out += s[Math.floor(Math.random() * s.length)];
+    return out;
+  }
+  function readRoom() {
+    var v = ($("inRoom").value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (v.length < 3) return null;
+    return v.slice(0, 8);
+  }
+  function doEnter(host) {
+    var room = readRoom();
+    if (!room) { netStEl = $("netSt"); netSt("房间码至少 <b>3</b> 位（字母或数字），或者留空让我帮你生成一个。"); }
+    else { enterRoom(room, host); }
+  }
+
+  $("bCreate").addEventListener("click", function () {
+    if (!readRoom()) $("inRoom").value = randRoom();
+    doEnter(true);
+  });
+  $("bJoin").addEventListener("click", function () { doEnter(false); });
+  $("inRoom").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") doEnter(false);
+  });
+
+  /* ================================================================
+     8. 主循环
+     ================================================================ */
+  var last = 0;
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    var dt = Math.min(0.05, (ts - last) / 1000 || 0.016);
+    last = ts;
+
+    for (var i = timers.length - 1; i >= 0; i--) {
+      timers[i].t -= dt;
+      if (timers[i].t <= 0) {
+        var fn = timers[i].fn;
+        timers.splice(i, 1);
+        fn();
+      }
+    }
+    tickSync();
+
+    myGeo = render();
+    $("tip").textContent = tipText();
+    // 轮到我出牌时把提示条点亮成金色，比在画布上写字更醒目也不会和顶栏打架
+    var tipEl = $("tip");
+    if (iAmdrawNow()) tipEl.classList.add("myturn");
+    else tipEl.classList.remove("myturn");
+  }
+
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

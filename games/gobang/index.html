@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>棋苑 · 五子棋 &amp; 围棋</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #16110d;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    overscroll-behavior: none; touch-action: none;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    color: #f0e6d8;
+  }
+
+  /* ---------------- 顶栏 ---------------- */
+  #bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 12px; background: linear-gradient(180deg, rgba(14,10,7,.96), rgba(14,10,7,.55) 70%, transparent);
+  }
+  #bar .brand { font-size: 13px; font-weight: 800; letter-spacing: 1px; color: #f5e9d4; margin-right: auto; }
+  #bar .brand small { display: block; font-size: 10px; font-weight: 400; opacity: .55; letter-spacing: 0; }
+  #bar .stat { font-size: 12px; font-weight: 700; color: rgba(240,230,216,.78); margin-right: 4px; white-space: nowrap; }
+  .btn {
+    cursor: pointer; font: inherit; font-size: 12px; font-weight: 700;
+    padding: 7px 13px; border-radius: 999px; color: #f0e6d8;
+    border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08);
+    transition: background .15s, border-color .15s, transform .1s;
+    text-decoration: none; display: inline-block;
+  }
+  .btn:hover { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.36); }
+  .btn:active { transform: translateY(1px); }
+  .btn.pri { background: rgba(232,176,75,.22); border-color: rgba(232,176,75,.6); color: #ffe9bd; }
+  .btn.pri:hover { background: rgba(232,176,75,.36); }
+  .btn.warn { background: rgba(232,68,58,.2); border-color: rgba(232,68,58,.55); color: #ffd9d4; }
+  .btn.blink { animation: blink 1s infinite; }
+  @keyframes blink { 50% { background: rgba(232,176,75,.5); } }
+  #roomtag {
+    display: none; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+    color: #d6ecdd; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 999px; padding: 6px 12px; cursor: pointer;
+  }
+  #roomtag.on { display: inline-flex; }
+  #roomtag i { font-style: normal; color: #ffd45b; letter-spacing: 1px; }
+
+  /* ---------------- 主区 ---------------- */
+  #main {
+    position: fixed; inset: 0; padding-top: 46px;
+    display: flex; gap: 12px; align-items: stretch;
+  }
+  #boardWrap { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 6px; }
+  #cv { display: block; touch-action: none; -webkit-user-drag: none; }
+  #side {
+    flex: 0 0 292px; display: flex; flex-direction: column; gap: 10px;
+    padding: 6px 10px 10px 0; overflow-y: auto; min-height: 0;
+  }
+  .card {
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 12px 14px; font-size: 12.5px; line-height: 1.8;
+  }
+  .card h3 { font-size: 12px; letter-spacing: 2px; opacity: .65; margin-bottom: 6px; font-weight: 800; }
+  .pl { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .pl + .pl { border-top: 1px dashed rgba(255,255,255,.1); }
+  .pl .dot { width: 18px; height: 18px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  .pl .dot.b { background: radial-gradient(circle at 35% 30%, #4a4a4a, #050505 70%); }
+  .pl .dot.w { background: radial-gradient(circle at 35% 30%, #ffffff, #c6c6c6 75%); }
+  .pl .nm { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl .tag { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.1); color: rgba(240,230,216,.7); }
+  .pl.turn { background: rgba(232,176,75,.12); border-radius: 9px; }
+  .pl.turn .tag { background: #e8b04b; color: #221a08; }
+  .pl.offline .nm { opacity: .45; text-decoration: line-through; }
+  #log { max-height: 200px; overflow-y: auto; font-size: 12px; line-height: 1.75; font-family: Consolas, "Courier New", monospace; }
+  #log .mv { display: inline-block; min-width: 62px; }
+  #log .b { color: #9fb4ff; } #log .w { color: #ffcf9b; }
+  #log .cur { background: rgba(232,176,75,.25); border-radius: 4px; }
+  .card.rules { font-size: 12px; opacity: .85; }
+  .card.rules em { color: #ffd45b; font-style: normal; font-weight: 700; }
+
+  /* ---------------- 提示条 ---------------- */
+  #tip {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 11;
+    font-size: 12.5px; color: #f5e9d4; background: rgba(20,14,9,.85);
+    border: 1px solid rgba(255,255,255,.14); border-radius: 999px; padding: 7px 18px;
+    white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis;
+    pointer-events: none;
+  }
+  #tip.myturn { color: #221a08; background: #ffd45b; border-color: rgba(0,0,0,.2); font-weight: 800; }
+
+  /* ---------------- 覆盖层 ---------------- */
+  .ov {
+    position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 13px; overflow-y: auto;
+    background: rgba(12,8,5,.94); text-align: center; padding: 24px;
+  }
+  .ov.hidden { display: none; }
+  .ov h1 { font-size: 27px; letter-spacing: 3px; }
+  .ov h1 small { display: block; font-size: 11px; letter-spacing: 2px; opacity: .55; margin-top: 4px; font-weight: 400; }
+  .ov .lead { font-size: 12.5px; line-height: 1.85; opacity: .8; max-width: 620px; }
+  .ov .lead b { color: #ffd45b; }
+  .ov .panel {
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 12px; padding: 14px 18px; max-width: 640px; width: 100%; text-align: left;
+  }
+  .ov .panel.hidden { display: none; }
+  .ov .panel h3 { font-size: 12px; letter-spacing: 1px; margin-bottom: 10px; opacity: .9; }
+  .ov .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .ov .row + .row { margin-top: 9px; }
+  .ov .lbl { font-size: 12px; opacity: .65; width: 44px; flex: 0 0 auto; }
+  .ov input {
+    font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 9px;
+    border: 1px solid rgba(255,255,255,.24); background: rgba(0,0,0,.3); color: #f0e6d8;
+    min-width: 0; flex: 1 1 130px;
+  }
+  .ov input::placeholder { color: rgba(240,230,216,.4); }
+  .opt {
+    cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 700;
+    padding: 8px 16px; border-radius: 999px; color: rgba(240,230,216,.75);
+    border: 1px solid rgba(255,255,255,.18); background: transparent; transition: all .15s;
+  }
+  .opt:hover { background: rgba(255,255,255,.1); }
+  .opt.on { color: #221a08; background: #ffd45b; border-color: #ffd45b; }
+  .st { margin-top: 10px; font-size: 12px; line-height: 1.7; color: rgba(240,230,216,.72); }
+  .st b { color: #ffd45b; }
+  #res h1.win { color: #ffd45b; }
+  #res h1.lose { color: #ff9d94; }
+  #res h1.draw { color: #9fd8ff; }
+
+  @media (max-width: 920px) {
+    #main { flex-direction: column; padding-top: 42px; }
+    #boardWrap { flex: 1 1 auto; padding: 2px; }
+    #side { flex: 0 0 auto; max-height: 34vh; padding: 0 8px 8px; }
+    #log { max-height: 90px; }
+    .card.rules { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div class="brand">棋苑 · 五子棋 &amp; 围棋<small>GOMOKU &amp; GO · AI 对手：Sayuri 小百合</small></div>
+  <span class="stat" id="stat"></span>
+  <div id="roomtag" title="点击复制房间码">房间 <i id="roomcode">----</i></div>
+  <button class="btn" id="bUndo" title="悔棋">悔棋</button>
+  <button class="btn" id="bPass" style="display:none;" title="虚手（跳过一手）">虚手</button>
+  <button class="btn warn" id="bResign" title="认输">认输</button>
+  <button class="btn" id="bRestart">重新开局</button>
+  <button class="btn" id="bSound">🔊</button>
+  <a class="btn" href="/">↩ 博客</a>
+  <button class="btn" id="bMenu">返回菜单</button>
+  <button class="btn" id="bLeave" style="display:none;">离开房间</button>
+</div>
+
+<div id="main">
+  <div id="boardWrap"><canvas id="cv"></canvas></div>
+  <div id="side">
+    <div class="card" id="players"></div>
+    <div class="card"><h3>棋谱</h3><div id="log"></div></div>
+    <div class="card rules" id="rules"></div>
+  </div>
+</div>
+
+<div id="tip">填个昵称，选好棋种和模式，就可以开局</div>
+
+<!-- ================= 开始界面 ================= -->
+<div id="ov" class="ov">
+  <h1>棋苑<small>五子棋 &amp; 围棋 · 单机 / 联机</small></h1>
+
+  <div class="panel">
+    <div class="row">
+      <span class="lbl">昵称</span>
+      <input id="inName" maxlength="8" placeholder="怎么称呼你？（会显示在棋盘上）">
+    </div>
+    <div class="row">
+      <span class="lbl">模式</span>
+      <button class="opt on" id="mSingle">单机对战</button>
+      <button class="opt" id="mNet">联机对战</button>
+    </div>
+  </div>
+
+  <!-- 单机设置 -->
+  <div class="panel" id="pSingle">
+    <h3>单机设置</h3>
+    <div class="row">
+      <span class="lbl">棋种</span>
+      <button class="opt on" data-type="gomoku">五子棋 15×15</button>
+      <button class="opt" data-type="go">围棋</button>
+    </div>
+    <div class="row" id="rowSize" style="display:none;">
+      <span class="lbl">棋盘</span>
+      <button class="opt on" data-size="9">9 路</button>
+      <button class="opt" data-size="13">13 路</button>
+      <button class="opt" data-size="19">19 路</button>
+    </div>
+    <div class="row" id="rowOpp">
+      <span class="lbl">对手</span>
+      <button class="opt on" data-opp="ai">电脑 Sayuri</button>
+      <button class="opt" data-opp="local">同设备双人</button>
+    </div>
+    <div class="row" id="rowDiff">
+      <span class="lbl">难度</span>
+      <button class="opt" data-diff="1">简单</button>
+      <button class="opt on" data-diff="2">普通</button>
+      <button class="opt" data-diff="3">困难</button>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn pri" id="bStartSingle" style="font-size:14px;padding:10px 30px;">开始对局</button>
+    </div>
+  </div>
+
+  <!-- 联机设置 -->
+  <div class="panel hidden" id="pNet">
+    <h3>联机对战 · 房间码 1v1（房主执黑先行）</h3>
+    <div class="row">
+      <span class="lbl">棋种</span>
+      <button class="opt on" data-ntype="gomoku">五子棋 15×15</button>
+      <button class="opt" data-ntype="go">围棋</button>
+    </div>
+    <div class="row" id="rowNSize" style="display:none;">
+      <span class="lbl">棋盘</span>
+      <button class="opt on" data-nsize="9">9 路</button>
+      <button class="opt" data-nsize="13">13 路</button>
+      <button class="opt" data-nsize="19">19 路</button>
+    </div>
+    <div class="row">
+      <span class="lbl">房间</span>
+      <input id="inRoom" maxlength="8" placeholder="房间码（4 位字母数字，可留空自动生成）">
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <button class="btn pri" id="bCreate">创建房间（执黑）</button>
+      <button class="btn" id="bJoin">加入房间（执白）</button>
+    </div>
+    <div class="st" id="netSt">创建房间后把房间码发给朋友，对方填码加入即可对弈；其他人进来只能观战。</div>
+  </div>
+
+  <div class="lead">
+    电脑对手 <b>Sayuri 小百合</b> —— 名字取自围棋引擎
+    <a href="https://github.com/CGLemon/Sayuri" target="_blank" rel="noopener" style="color:#ffd45b;">CGLemon/Sayuri</a>
+    （AlphaZero 风格的围棋引擎）。这里是网页版的轻量实现：五子棋用<b>博弈树搜索</b>，围棋用<b>启发式 + 叫吃判断</b>。<br>
+    联机走公共 MQTT 中继（broker.emqx.io），不用注册、不用服务器，博客仍然是静态站。
+  </div>
+</div>
+
+<!-- ================= 结算界面 ================= -->
+<div id="res" class="ov hidden">
+  <h1 id="resTitle">你赢了！</h1>
+  <div class="lead" id="resDetail"></div>
+  <div class="row">
+    <button class="btn pri" id="bAgain" style="font-size:14px;padding:10px 30px;">再来一局</button>
+    <button class="btn" id="bResMenu">返回菜单</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ================================================================
+     0. 常量与全局
+     ================================================================ */
+  var EMPTY = 0, BLACK = 1, WHITE = 2;
+  var KOMI = 7.5;                       // 围棋贴目（中国规则数子法）
+  var LETTERS = "ABCDEFGHJKLMNOPQRST";  // 围棋坐标字母（跳过 I）
+  var DIFF_NAME = { 1: "简单", 2: "普通", 3: "困难" };
+  var S = null;                         // 对局状态
+  var cfg = {                           // 开始界面的选择
+    type: "gomoku", size: 9, opp: "ai", diff: 2,
+    ntype: "gomoku", nsize: 9
+  };
+  var myName = "";
+  var sound = true;
+  var hover = null;                     // {x,y} 鼠标悬停点
+  var aiTimer = null;
+
+  /* ================================================================
+     1. 对局状态
+     ================================================================ */
+  function newState(type, size) {
+    return {
+      type: type, size: size,
+      board: new Int8Array(size * size),
+      turn: BLACK, caps: [0, 0], passes: 0,
+      last: null, moves: [], over: false, result: null,
+      phase: "play",                    // play | dead（终局盘点）| over
+      dead: [], deadOk: { 1: false, 2: false },
+      ko: -1, winLine: null, hist: []
+    };
+  }
+  function idx(x, y) { return y * S.size + x; }
+  function inb(x, y) { return x >= 0 && y >= 0 && x < S.size && y < S.size; }
+  function other(c) { return 3 - c; }
+  function colorChar(c) { return c === BLACK ? "b" : "w"; }
+  function colorName(c) { return c === BLACK ? "黑方" : "白方"; }
+  function coord(x, y) { return LETTERS[x] + (S.size - y); }
+
+  function pushHistory() {
+    S.hist.push({
+      board: S.board.slice(), turn: S.turn, caps: S.caps.slice(),
+      passes: S.passes, last: S.last, ko: S.ko, dead: S.dead.slice(),
+      deadOk: { 1: S.deadOk[1], 2: S.deadOk[2] }, movesLen: S.moves.length,
+      phase: S.phase
+    });
+    if (S.hist.length > 500) S.hist.shift();
+  }
+  function undoOne() {
+    var h = S.hist.pop();
+    if (!h) return false;
+    S.board = h.board; S.turn = h.turn; S.caps = h.caps; S.passes = h.passes;
+    S.last = h.last; S.ko = h.ko; S.dead = h.dead; S.deadOk = h.deadOk;
+    S.moves.length = h.movesLen;
+    S.over = false; S.result = null; S.phase = "play"; S.winLine = null;
+    return true;
+  }
+  /* 回退到 color 上一次落子之前：
+     看棋谱最后一手是谁的 —— 是自己的（对手还没应，比如 AI 思考中）→ 只撤自己一手；
+     是对手的（已经应了）→ 先撤对手应手，再撤自己上一手。 */
+  function undoToRequester(color) {
+    var lastC = S.moves.length ? S.moves[S.moves.length - 1].c : 0;
+    if (lastC === color) {
+      undoOne();
+    } else if (S.moves.length >= 2) {
+      undoOne();
+      undoOne();
+    }
+  }
+
+  /* ================================================================
+     2. 五子棋
+     ================================================================ */
+  var DIRS = [[1, 0], [0, 1], [1, 1], [1, -1]];
+
+  /* 连子数 → [单端封, 一端活, 两端活] 的威胁分 */
+  var RUN_SCORE = [
+    null,
+    [0, 8, 55],
+    [0, 90, 700],
+    [0, 900, 6500],
+    [0, 8000, 60000],
+    [500000, 500000, 500000]
+  ];
+
+  function gomoWinAt(board, size, x, y, c) {
+    for (var d = 0; d < 4; d++) {
+      var dx = DIRS[d][0], dy = DIRS[d][1], n = 1, i, nx, ny;
+      for (i = 1; i < 5; i++) { nx = x + dx * i; ny = y + dy * i; if (nx < 0 || ny < 0 || nx >= size || ny >= size || board[ny * size + nx] !== c) break; n++; }
+      for (i = 1; i < 5; i++) { nx = x - dx * i; ny = y - dy * i; if (nx < 0 || ny < 0 || nx >= size || ny >= size || board[ny * size + nx] !== c) break; n++; }
+      if (n >= 5) return true;
+    }
+    return false;
+  }
+
+  function gomoWinLineAt(board, size, x, y, c) {
+    for (var d = 0; d < 4; d++) {
+      var dx = DIRS[d][0], dy = DIRS[d][1], n = 1, i, nx, ny;
+      var cells = [[x, y]];
+      for (i = 1; i < 5; i++) { nx = x + dx * i; ny = y + dy * i; if (nx < 0 || ny < 0 || nx >= size || ny >= size || board[ny * size + nx] !== c) break; n++; cells.push([nx, ny]); }
+      for (i = 1; i < 5; i++) { nx = x - dx * i; ny = y - dy * i; if (nx < 0 || ny < 0 || nx >= size || ny >= size || board[ny * size + nx] !== c) break; n++; cells.push([nx, ny]); }
+      if (n >= 5) return cells;
+    }
+    return null;
+  }
+
+  /* 全盘评估：每条「同色连续段」按连子数与活端数计分 */
+  function gomoEvalBoard(board, size, c) {
+    var total = 0;
+    for (var y = 0; y < size; y++) for (var x = 0; x < size; x++) {
+      if (board[y * size + x] !== c) continue;
+      for (var d = 0; d < 4; d++) {
+        var dx = DIRS[d][0], dy = DIRS[d][1];
+        var px = x - dx, py = y - dy;
+        if (px >= 0 && py >= 0 && px < size && py < size && board[py * size + px] === c) continue;
+        var cnt = 0, nx = x, ny = y;
+        while (nx >= 0 && ny >= 0 && nx < size && ny < size && board[ny * size + nx] === c) { cnt++; nx += dx; ny += dy; }
+        if (cnt >= 5) { total += 500000; continue; }
+        var open = 0;
+        if (nx >= 0 && ny >= 0 && nx < size && ny < size && board[ny * size + nx] === EMPTY) open++;
+        var bx = x - dx, by = y - dy;
+        if (bx >= 0 && by >= 0 && bx < size && by < size && board[by * size + bx] === EMPTY) open++;
+        total += RUN_SCORE[cnt][open];
+      }
+    }
+    return total;
+  }
+
+  /* 局部评估：只算以 (x,y) 为中心的 4 条线，用于候选排序 */
+  function gomoLocalEval(board, size, x, y, c) {
+    var total = 0;
+    for (var d = 0; d < 4; d++) {
+      var dx = DIRS[d][0], dy = DIRS[d][1], cnt = 1, open = 0, i, nx, ny;
+      for (i = 1; i < 5; i++) {
+        nx = x + dx * i; ny = y + dy * i;
+        if (nx < 0 || ny < 0 || nx >= size || ny >= size) break;
+        if (board[ny * size + nx] === c) cnt++;
+        else { if (board[ny * size + nx] === EMPTY) open++; break; }
+      }
+      for (i = 1; i < 5; i++) {
+        nx = x - dx * i; ny = y - dy * i;
+        if (nx < 0 || ny < 0 || nx >= size || ny >= size) break;
+        if (board[ny * size + nx] === c) cnt++;
+        else { if (board[ny * size + nx] === EMPTY) open++; break; }
+      }
+      total += RUN_SCORE[Math.min(cnt, 5)][Math.min(open, 2)];
+    }
+    return total;
+  }
+
+  /* 候选点：已有棋子切比雪夫距离 2 内的空点 */
+  function gomoCandidates(board, size) {
+    var res = [], any = false, y, x;
+    for (y = 0; y < size; y++) for (x = 0; x < size; x++) if (board[y * size + x] !== EMPTY) { any = true; break; }
+    if (!any) return [[(size - 1) >> 1, (size - 1) >> 1]];
+    for (y = 0; y < size; y++) for (x = 0; x < size; x++) {
+      if (board[y * size + x] !== EMPTY) continue;
+      var near = false;
+      for (var dy = -2; dy <= 2 && !near; dy++) for (var dx = -2; dx <= 2; dx++) {
+        var nx = x + dx, ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < size && ny < size && board[ny * size + nx] !== EMPTY) { near = true; break; }
+      }
+      if (near) res.push([x, y]);
+    }
+    return res;
+  }
+
+  function gomoNegamax(board, size, c, depth, alpha, beta, ply) {
+    if (depth === 0) return gomoEvalBoard(board, size, c) - gomoEvalBoard(board, size, other(c));
+    var cands = gomoCandidates(board, size);
+    if (!cands.length) return gomoEvalBoard(board, size, c) - gomoEvalBoard(board, size, other(c));
+    var o = other(c), scored = [];
+    for (var i = 0; i < cands.length; i++) {
+      var x = cands[i][0], y = cands[i][1], k = y * size + x;
+      var v = gomoLocalEval(board, size, x, y, c) + gomoLocalEval(board, size, x, y, o) * 0.9;
+      scored.push([v, x, y]);
+    }
+    scored.sort(function (a, b) { return b[0] - a[0]; });
+    var K = depth >= 3 ? 8 : 10;
+    var best = -1e9;
+    for (var j = 0; j < scored.length && j < K; j++) {
+      var sx = scored[j][1], sy = scored[j][2], sk = sy * size + sx;
+      board[sk] = c;
+      var val;
+      if (gomoWinAt(board, size, sx, sy, c)) val = 900000 - ply;
+      else val = -gomoNegamax(board, size, o, depth - 1, -beta, -alpha, ply + 1);
+      board[sk] = EMPTY;
+      if (val > best) best = val;
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+
+  function gomoAiMove() {
+    var board = S.board, size = S.size, me = S.turn, o = other(me);
+    var cands = gomoCandidates(board, size);
+    if (!cands.length) return null;
+    /* 能赢就赢 */
+    for (var i = 0; i < cands.length; i++) {
+      var x = cands[i][0], y = cands[i][1], k = y * size + x;
+      board[k] = me;
+      var win = gomoWinAt(board, size, x, y, me);
+      board[k] = EMPTY;
+      if (win) return [x, y];
+    }
+    /* 对手能赢就堵 */
+    for (var i2 = 0; i2 < cands.length; i2++) {
+      var x2 = cands[i2][0], y2 = cands[i2][1], k2 = y2 * size + x2;
+      board[k2] = o;
+      var lose = gomoWinAt(board, size, x2, y2, o);
+      board[k2] = EMPTY;
+      if (lose) return [x2, y2];
+    }
+    /* 排序 */
+    var scored = [];
+    for (var j = 0; j < cands.length; j++) {
+      var cx = cands[j][0], cy = cands[j][1];
+      var v = gomoLocalEval(board, size, cx, cy, me) + gomoLocalEval(board, size, cx, cy, o) * 0.9;
+      scored.push([v, cx, cy]);
+    }
+    scored.sort(function (a, b) { return b[0] - a[0]; });
+    if (S.diff === 1) {
+      /* 简单：静态最优里带噪声随机，偶尔看走眼 */
+      var pool = scored.slice(0, Math.min(6, scored.length));
+      var pick = pool[Math.floor(Math.random() * pool.length)];
+      if (Math.random() < 0.12) {
+        var rnd = cands[Math.floor(Math.random() * cands.length)];
+        return rnd;
+      }
+      return [pick[1], pick[2]];
+    }
+    var K = S.diff >= 3 ? 8 : 10;
+    var depth = S.diff >= 3 ? 4 : 2;
+    var bestV = -1e9, bestM = scored[0];
+    for (var m = 0; m < scored.length && m < K; m++) {
+      var mx = scored[m][1], my = scored[m][2], mk = my * size + mx;
+      board[mk] = me;
+      var val;
+      if (gomoWinAt(board, size, mx, my, me)) val = 900000;
+      else val = -gomoNegamax(board, size, o, depth - 1, -1e9, 1e9, 1);
+      board[mk] = EMPTY;
+      val += Math.random() * 2;              // 同分随机，避免每局一样
+      if (val > bestV) { bestV = val; bestM = scored[m]; }
+    }
+    return [bestM[1], bestM[2]];
+  }
+
+  /* ================================================================
+     3. 围棋
+     ================================================================ */
+  function goNeighbors(size, x, y) {
+    var r = [];
+    if (x > 0) r.push(y * size + x - 1);
+    if (x < size - 1) r.push(y * size + x + 1);
+    if (y > 0) r.push((y - 1) * size + x);
+    if (y < size - 1) r.push((y + 1) * size + x);
+    return r;
+  }
+
+  /* 提取整组棋 + 气 */
+  function goGroup(board, size, start) {
+    var c = board[start], stones = [start], seen = { }, libs = { }, stack = [start];
+    seen[start] = 1;
+    while (stack.length) {
+      var k = stack.pop();
+      var x = k % size, y = (k - x) / size;
+      var nb = goNeighbors(size, x, y);
+      for (var i = 0; i < nb.length; i++) {
+        var n = nb[i];
+        if (board[n] === EMPTY) { libs[n] = 1; continue; }
+        if (board[n] === c && !seen[n]) { seen[n] = 1; stones.push(n); stack.push(n); }
+      }
+    }
+    return { stones: stones, libs: Object.keys(libs) };
+  }
+
+  /* 尝试落子；返回 { ok, board, cap:[被提下标], ko } */
+  function goPlay(board, size, x, y, c) {
+    if (x < 0 || y < 0 || x >= size || y >= size) return { ok: false };
+    var i = y * size + x;
+    if (board[i] !== EMPTY) return { ok: false };
+    var b = board.slice();
+    b[i] = c;
+    var o = other(c), cap = [], seen = { };
+    var nb = goNeighbors(size, x, y);
+    for (var j = 0; j < nb.length; j++) {
+      var n = nb[j];
+      if (b[n] !== o || seen[n]) continue;
+      var g = goGroup(b, size, n);
+      for (var q = 0; q < g.stones.length; q++) seen[g.stones[q]] = 1;
+      if (g.libs.length === 0) cap = cap.concat(g.stones);
+    }
+    for (var t = 0; t < cap.length; t++) b[cap[t]] = EMPTY;
+    var mine = goGroup(b, size, i);
+    if (mine.libs.length === 0) return { ok: false };          // 禁止自杀
+    return { ok: true, board: b, cap: cap, ko: (cap.length === 1 && mine.stones.length === 1) ? cap[0] : -1 };
+  }
+
+  /* 数子：空区只挨一色棋子 → 该方目 */
+  function goScore(board, size) {
+    var vis = new Uint8Array(size * size), bs = 0, ws = 0, bt = 0, wt = 0;
+    for (var i = 0; i < board.length; i++) {
+      if (board[i] === BLACK) { bs++; continue; }
+      if (board[i] === WHITE) { ws++; continue; }
+      if (vis[i]) continue;
+      var stack = [i], n = 0, tb = false, tw = false;
+      vis[i] = 1;
+      while (stack.length) {
+        var k = stack.pop(); n++;
+        var x = k % size, y = (k - x) / size;
+        var nb = goNeighbors(size, x, y);
+        for (var j = 0; j < nb.length; j++) {
+          var m = nb[j];
+          if (board[m] === BLACK) tb = true;
+          else if (board[m] === WHITE) tw = true;
+          else if (!vis[m]) { vis[m] = 1; stack.push(m); }
+        }
+      }
+      if (tb && !tw) bt += n; else if (tw && !tb) wt += n;
+    }
+    return { bs: bs, ws: ws, bt: bt, wt: wt, black: bs + bt, white: ws + wt };
+  }
+
+  /* 真眼判断：正交全为己方（或边），对角不全为敌 */
+  function goIsEye(board, size, x, y, c) {
+    if (!inb(x, y) || board[idx(x, y)] !== EMPTY) return false;
+    var orth = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (var i = 0; i < 4; i++) {
+      var nx = x + orth[i][0], ny = y + orth[i][1];
+      if (inb(nx, ny) && board[idx(nx, ny)] !== c) return false;
+    }
+    var diag = [[1, 1], [1, -1], [-1, 1], [-1, -1]], own = 0, tot = 0;
+    for (var j = 0; j < 4; j++) {
+      var dx = x + diag[j][0], dy = y + diag[j][1];
+      if (inb(dx, dy)) { tot++; if (board[idx(dx, dy)] === c) own++; }
+    }
+    if (tot > 0 && own === 0) return false;
+    return true;
+  }
+
+  function goOpening(size) {
+    var p = size <= 9 ? 2 : 3;
+    var corners = [[p, p], [p, size - 1 - p], [size - 1 - p, p], [size - 1 - p, size - 1 - p]];
+    var c = corners[Math.floor(Math.random() * 4)];
+    if (S.diff >= 3 && size >= 13 && Math.random() < 0.5) {   /* 困难爱走小目 */ }
+    return c;
+  }
+
+  function goRespond(size, fx, fy) {
+    var dx = fx < size / 2 ? 1 : -1, dy = fy < size / 2 ? 1 : -1;
+    var tries = [[fx + dx, fy + dy], [fx + dx, fy], [fx, fy + dy], [fx - dx, fy + dy], [fx + dx, fy - dy]];
+    for (var i = 0; i < tries.length; i++) {
+      var x = tries[i][0], y = tries[i][1];
+      if (inb(x, y) && S.board[idx(x, y)] === EMPTY) return [x, y];
+    }
+    return null;
+  }
+
+  function goAiMove() {
+    var size = S.size, board = S.board, me = S.turn, o = other(me);
+    var total = 0, first = null;
+    for (var i = 0; i < board.length; i++) if (board[i] !== EMPTY) { total++; if (!first) first = i; }
+    if (total === 0) return goOpening(size);
+    if (total === 1) {
+      var fx = first % size, fy = (first - fx) / size;
+      var r = goRespond(size, fx, fy);
+      if (r) return r;
+    }
+
+    /* 候选：已有棋子附近 2 格内的空点 */
+    var cands = [];
+    for (var y = 0; y < size; y++) for (var x = 0; x < size; x++) {
+      if (board[idx(x, y)] !== EMPTY) continue;
+      var near = false;
+      for (var dy = -2; dy <= 2 && !near; dy++) for (var dx = -2; dx <= 2; dx++) {
+        var nx = x + dx, ny = y + dy;
+        if (inb(nx, ny) && board[idx(nx, ny)] !== EMPTY) { near = true; break; }
+      }
+      if (near) cands.push([x, y]);
+    }
+    if (!cands.length) return null;                    // 无处可下 → 虚手
+
+    /* 自家被打吃的组：救援点加权 */
+    var urgent = { };
+    var checked = { };
+    for (var t = 0; t < board.length; t++) {
+      if (board[t] !== me || checked[t]) continue;
+      var g0 = goGroup(board, size, t);
+      for (var q = 0; q < g0.stones.length; q++) checked[g0.stones[q]] = 1;
+      if (g0.libs.length === 1) urgent[g0.libs[0]] = 34;
+    }
+
+    var scored = [];
+    for (var ci = 0; ci < cands.length; ci++) {
+      var cx = cands[ci][0], cy = cands[ci][1];
+      if (goIsEye(board, size, cx, cy, me)) continue;             // 不填自己的真眼
+      var r2 = goPlay(board, size, cx, cy, me);
+      if (!r2.ok) continue;
+      var sc = r2.cap.length * 14;
+      if (urgent[cy * size + cx]) sc += urgent[cy * size + cx];
+      var mine = goGroup(r2.board, size, cy * size + cx);
+      var libs = mine.libs.length;
+      if (libs === 1) sc -= (S.diff >= 2 ? 26 : 12);
+      /* 邻接：连接加分；叫吃/打吃敌组加分 */
+      var nb = goNeighbors(size, cx, cy);
+      for (var ni = 0; ni < nb.length; ni++) {
+        var nk = nb[ni];
+        if (board[nk] === me) sc += 3;
+        else if (board[nk] === o) {
+          var eg = goGroup(r2.board, size, nk);
+          if (eg.libs.length === 1) sc += 11;                      // 叫吃
+          else if (eg.libs.length === 2) sc += 4;
+        }
+      }
+      /* 边线惩罚（角部附近除外） */
+      var edge = (cx === 0 || cy === 0 || cx === size - 1 || cy === size - 1);
+      var cornerish = (cx <= 2 || cy <= 2 || cx >= size - 3 || cy >= size - 3);
+      if (edge && !cornerish) sc -= 5;
+      sc += Math.random() * (S.diff === 1 ? 12 : 3);
+      scored.push({ x: cx, y: cy, s: sc, libs: libs, nb: r2.board });
+    }
+    if (!scored.length) return null;
+    scored.sort(function (a, b) { return b.s - a.s; });
+
+    var pool = S.diff === 1 ? Math.min(5, scored.length) : (S.diff === 2 ? Math.min(3, scored.length) : Math.min(6, scored.length));
+    for (var p = 0; p < pool; p++) {
+      var mv = scored[p];
+      if (S.diff >= 2 && mv.libs === 1 && p < pool - 1) {
+        /* 普通/困难：落子后自家只剩一口气、且对方能一步提回整组 → 换一招 */
+        var lp = mv.nb, lk = -1;
+        var mg = goGroup(lp, size, mv.y * size + mv.x);
+        if (mg.libs.length === 1) {
+          var lx = mg.libs[0] % size, ly = (mg.libs[0] - lx) / size;
+          var cap = goPlay(lp, size, lx, ly, o);
+          if (cap.ok && cap.cap.length >= Math.max(2, mg.stones.length - 1)) continue;
+        }
+      }
+      return [mv.x, mv.y];
+    }
+    return [scored[0].x, scored[0].y];
+  }
+
+  /* ================================================================
+     4. 落子主流程（单机与房主共用）
+     ================================================================ */
+  function canPlayAt(x, y) {
+    if (!S || S.over || S.phase !== "play") return false;
+    if (!inb(x, y)) return false;
+    var i = idx(x, y);
+    if (S.board[i] !== EMPTY) return false;
+    if (S.type === "go" && S.ko === i) return false;      // 打劫禁止立即回提
+    return true;
+  }
+
+  function doMove(x, y) {
+    if (!canPlayAt(x, y)) return false;
+    var i = idx(x, y), c = S.turn;
+    pushHistory();
+    if (S.type === "gomoku") {
+      S.board[i] = c;
+      S.last = { x: x, y: y };
+      S.moves.push({ x: x, y: y, c: c });
+      var line = gomoWinLineAt(S.board, S.size, x, y, c);
+      if (line) {
+        S.winLine = line; S.over = true; S.phase = "over";
+        S.result = { winner: c, reason: "五连获胜" };
+      } else if (S.moves.length >= S.size * S.size) {
+        S.over = true; S.phase = "over";
+        S.result = { winner: 0, reason: "棋盘已满" };
+      } else {
+        S.turn = other(c);
+      }
+      beep(540, .06, .09);
+    } else {
+      var r = goPlay(S.board, S.size, x, y, c);
+      if (!r.ok) return false;
+      S.board = r.board;
+      S.caps[c - 1] += r.cap.length;
+      S.ko = r.ko;
+      S.passes = 0;
+      S.last = { x: x, y: y };
+      S.moves.push({ x: x, y: y, c: c });
+      S.turn = other(c);
+      if (r.cap.length) beep(300, .12, .12); else beep(520, .06, .08);
+    }
+    afterMove();
+    return true;
+  }
+
+  function doPass() {
+    if (!S || S.type !== "go" || S.over || S.phase !== "play") return;
+    pushHistory();
+    S.passes++;
+    S.moves.push({ x: -1, y: -1, c: S.turn });
+    if (S.passes >= 2) {
+      S.phase = "dead";                       // 双方连续虚手 → 终局盘点
+      S.dead = []; S.deadOk = { 1: false, 2: false };
+      tip("终局盘点：点击对方棋子标记死子，双方都点「确认」后数目");
+    } else {
+      S.turn = other(S.turn);
+    }
+    beep(400, .08, .08);
+    afterMove();
+  }
+
+  function doResign(c) {
+    if (!S || S.over) return;
+    if (c == null) c = S.turn;
+    pushHistory();
+    S.over = true; S.phase = "over";
+    S.result = { winner: other(c), reason: colorName(c) + "认输" };
+    beep(220, .25, .12);
+    afterMove();
+  }
+
+  /* 终局盘点：标记 / 取消标记死子（只能标对方的子） */
+  function toggleDead(x, y) {
+    if (!S || S.type !== "go" || S.phase !== "dead") return false;
+    var mc = myColor();
+    var i = idx(x, y);
+    if (S.board[i] === EMPTY || (mc !== 0 && S.board[i] === mc)) return false;
+    var at = S.dead.indexOf(i);
+    if (at >= 0) S.dead.splice(at, 1); else S.dead.push(i);
+    beep(660, .05, .07);
+    return true;
+  }
+
+  /* 自己这一方确认死子标记 */
+  function confirmDeadMine() {
+    if (!S || S.type !== "go" || S.phase !== "dead") return;
+    if (S.mode === "single") { finalizeGo(); afterMove(); return; }
+    if (S.mode === "online") {
+      if (myRole === "w") { guestAct({ t: "deadOk" }); tip("已确认，等待房主确认…"); return; }
+      if (isHost) {
+        S.deadOk[BLACK] = true;
+        if (S.deadOk[WHITE]) finalizeGo();
+        else tip("已确认，等待对方确认…");
+        afterMove();
+      }
+    }
+  }
+
+  /* 终局盘点时任何一方可以「继续对弈」，清空标记回到棋盘上 */
+  function resumePlay() {
+    if (!S || S.type !== "go" || S.phase !== "dead") return;
+    if (S.mode === "online") {
+      if (myRole === "w") { guestAct({ t: "deadNo" }); return; }
+      if (!isHost) return;
+    }
+    S.phase = "play"; S.dead = []; S.deadOk = { 1: false, 2: false }; S.passes = 0;
+    tip("继续对弈");
+    afterMove();
+  }
+
+  function finalizeGo() {
+    var b = S.board.slice();
+    for (var i = 0; i < S.dead.length; i++) b[S.dead[i]] = EMPTY;
+    var sc = goScore(b, S.size);
+    var white = sc.white + KOMI;
+    var winner = sc.black > white ? BLACK : WHITE;
+    S.over = true; S.phase = "over";
+    S.result = {
+      winner: winner, reason: "数目",
+      score: { black: sc.black, white: white, bs: sc.bs, ws: sc.ws, bt: sc.bt, wt: sc.wt, dead: S.dead.slice() }
+    };
+    beep(winner === myColor() ? 660 : 330, .2, .12);
+  }
+
+  /* 每一步之后：AI 接力 / 联机广播 / 界面刷新 */
+  function afterMove() {
+    updatePanel();
+    if (S.mode === "online") { if (isHost) bcast(); }
+    if (S.over) showResult(); else hideResult();
+    scheduleAi();
+    syncUI();
+  }
+
+  function scheduleAi() {
+    if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; }
+    if (S.mode !== "single" || S.opp !== "ai" || S.over || S.phase !== "play") return;
+    if (S.turn !== WHITE) return;
+    aiTimer = setTimeout(function () {
+      aiTimer = null;
+      if (S.over || S.phase !== "play" || S.turn !== WHITE) return;
+      tip("Sayuri 小百合思考中…");
+      var mv = S.type === "gomoku" ? gomoAiMove() : goAiMove();
+      if (!mv) { doPass(); return; }
+      doMove(mv[0], mv[1]);
+    }, S.diff === 1 ? 320 : 480);
+  }
+
+  /* ================================================================
+     5. 联机（公共 MQTT 中继，房主权威）
+     静态站没有后端，用公共 MQTT 当传输：
+       qiyuan/<房间>/state   房主 → 所有人：公开状态（保留消息）
+       qiyuan/<房间>/act     客人 → 房主：落子 / 虚手 / 认输 / 悔棋请求 / 死子标记
+       qiyuan/<房间>/join    进出房间 + 心跳（保留消息）
+     只有房主跑游戏逻辑，其他人只渲染 —— 没有服务端，这是唯一能保证
+     状态一致的做法。⚠ 公共中继上的数据任何人都能订，别当正式对战平台用。
+     ================================================================ */
+  var Net = { cli: null, ready: false };
+  var MQTT_URLS = ["wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt"];
+  var MQTT_SRC = ["https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js",
+                  "https://cdn.jsdelivr.net/npm/mqtt@5.3.5/dist/mqtt.min.js"];
+  var online = false, isHost = false, roomCode = "", myPid = "";
+  var myRole = "s";                       // b=黑(房主) w=白(客人) s=观战
+  var seats = { b: null, w: null };       // {pid,name}
+  var lastSeen = { b: 0, w: 0 };
+  var stateVer = 0, undoReqPid = null;
+  var netStEl = null;
+
+  function netSt(html) { if (netStEl) netStEl.innerHTML = html; }
+
+  function loadMqtt(cb) {
+    if (window.mqtt) { cb(true); return; }
+    var i = 0;
+    (function next() {
+      if (i >= MQTT_SRC.length) { cb(false); return; }
+      var s = document.createElement("script");
+      s.src = MQTT_SRC[i++];
+      s.onload = function () { cb(!!window.mqtt); };
+      s.onerror = next;
+      document.head.appendChild(s);
+    })();
+  }
+
+  function netPub(suffix, obj, retain) {
+    if (!Net.cli || !Net.ready) return;
+    try {
+      Net.cli.publish("qiyuan/" + roomCode + "/" + suffix, JSON.stringify(obj), { qos: 0, retain: !!retain });
+    } catch (e) { }
+  }
+
+  function netConnect(onUp) {
+    var k = 0, ever = false;
+    function tryUrl() {
+      if (k >= MQTT_URLS.length) { netSt("连不上中继（网络或 CDN 被拦）。可以先用单机模式。"); return; }
+      var url = MQTT_URLS[k++], cli;
+      try {
+        cli = window.mqtt.connect(url, {
+          clientId: "qiyuan_" + roomCode + "_" + myPid, clean: true,
+          reconnectPeriod: 4000, connectTimeout: 9000, keepalive: 30
+        });
+      } catch (e) { tryUrl(); return; }
+      Net.cli = cli;
+      cli.on("connect", function () {
+        ever = true; Net.ready = true;
+        var base = "qiyuan/" + roomCode + "/";
+        cli.subscribe([base + "state", base + "act", base + "join"], { qos: 0 });
+        if (onUp) onUp();
+      });
+      cli.on("message", function (topic, buf) {
+        var sfx = topic.slice(("qiyuan/" + roomCode + "/").length);
+        var d = null;
+        try { d = JSON.parse(buf.toString()); } catch (e) { return; }
+        netOnMsg(sfx, d);
+      });
+      cli.on("close", function () { Net.ready = false; });
+      cli.on("error", function () { if (!ever) { try { cli.end(true); } catch (e) { } tryUrl(); } });
+    }
+    tryUrl();
+  }
+
+  /* ---- 房主：节流广播 ---- */
+  var lastBcast = 0, needSync = false;
+  function sync() { needSync = true; }
+  function tickSync() {
+    if (!online || !isHost) return;
+    if (needSync && Date.now() - lastBcast >= 70) { needSync = false; bcast(); }
+  }
+
+  function bcast() {
+    if (!online || !isHost || !S) return;
+    lastBcast = Date.now();
+    netPub("state", {
+      v: ++stateVer, type: S.type, size: S.size,
+      board: Array.prototype.slice.call(S.board),
+      turn: S.turn, phase: S.phase, caps: S.caps, passes: S.passes,
+      last: S.last, moves: S.moves.map(function (m) { return [m.x, m.y, m.c]; }),
+      dead: S.dead, deadOk: S.deadOk, ko: S.ko, winLine: S.winLine,
+      over: S.over ? 1 : 0, result: S.result,
+      seats: { b: seats.b ? seats.b.pid : null, w: seats.w ? seats.w.pid : null },
+      names: { b: seats.b ? seats.b.name : null, w: seats.w ? seats.w.name : null },
+      undoReq: undoReqPid
+    }, true);
+  }
+
+  /* ---- 客人：套用房主发来的状态 ---- */
+  function applyState(st) {
+    if (st.v && st.v < stateVer) return;
+    stateVer = st.v || stateVer;
+    var keepHist = S && S.hist;
+    S = newState(st.type, st.size);
+    S.hist = keepHist || [];
+    S.mode = "online";
+    S.board = new Int8Array(st.board);
+    S.turn = st.turn; S.phase = st.phase; S.caps = st.caps || [0, 0];
+    S.passes = st.passes || 0; S.last = st.last; S.ko = st.ko || -1;
+    S.winLine = st.winLine || null;
+    S.moves = (st.moves || []).map(function (m) { return { x: m[0], y: m[1], c: m[2] }; });
+    S.dead = st.dead || []; S.deadOk = st.deadOk || { 1: false, 2: false };
+    S.over = !!st.over; S.result = st.result || null;
+    seats.b = st.seats && st.seats.b ? { pid: st.seats.b, name: (st.names && st.names.b) || "黑方" } : null;
+    seats.w = st.seats && st.seats.w ? { pid: st.seats.w, name: (st.names && st.names.w) || "白方" } : null;
+    undoReqPid = st.undoReq || null;
+    myRole = (seats.w && seats.w.pid === myPid) ? "w" : ((seats.b && seats.b.pid === myPid) ? "b" : "s");
+    lastSeen.b = Date.now(); lastSeen.w = Date.now();
+    resize();
+    if (S.over) showResult(); else hideResult();
+    updatePanel();
+    syncUI();
+  }
+
+  function netOnMsg(sfx, d) {
+    if (sfx === "state") { if (!isHost && d) applyState(d); return; }
+    if (sfx === "join") { if (isHost) onJoin(d); return; }
+    if (sfx === "act") { if (isHost) onAct(d); return; }
+  }
+
+  function onJoin(d) {
+    if (!d || !d.pid || d.pid === myPid) return;
+    if (seats.b && seats.b.pid === d.pid) { lastSeen.b = Date.now(); return; }
+    if (seats.w && seats.w.pid === d.pid) { lastSeen.w = Date.now(); return; }
+    if (!seats.w) {
+      seats.w = { pid: d.pid, name: (d.nick || "玩家").slice(0, 8) };
+      lastSeen.w = Date.now();
+      netSt("对手 <b>" + esc(seats.w.name) + "</b> 已入座（执白）。人数齐了，点「重新开局」或下面的开始按钮开局。");
+    } else {
+      netSt("<b>" + esc((d.nick || "玩家").slice(0, 8)) + "</b> 进来观战。");
+    }
+    bcast();
+  }
+
+  function onAct(d) {
+    if (!d || !d.pid) return;
+    if (!seats.w || d.pid !== seats.w.pid) return;          // 只受理白方客人
+    lastSeen.w = Date.now();
+    var t = d.t;
+    if (t === "move") {
+      if (S.over || S.phase !== "play" || S.turn !== WHITE) return;
+      doMove(d.x, d.y);
+    } else if (t === "pass") {
+      if (S.over || S.phase !== "play" || S.turn !== WHITE) return;
+      doPass();
+    } else if (t === "resign") {
+      if (S.over) return;
+      doResign();
+    } else if (t === "undoReq") {
+      if (S.over) return;
+      undoReqPid = d.pid;
+      tip("对手请求悔棋 —— 点顶栏「悔棋」同意");
+      $("bUndo").classList.add("blink");
+      sync();
+    } else if (t === "dead") {
+      if (S.type === "go" && S.phase === "dead") {
+        var i = d.y * S.size + d.x;
+        if (S.board[i] === BLACK) {                            // 客人(白)只能标黑子
+          var at = S.dead.indexOf(i);
+          if (at >= 0) S.dead.splice(at, 1); else S.dead.push(i);
+          afterMove();
+        }
+      }
+    } else if (t === "deadOk") {
+      if (S.type === "go" && S.phase === "dead" && !S.deadOk[WHITE]) {
+        S.deadOk[WHITE] = true;
+        if (S.deadOk[BLACK] && S.deadOk[WHITE]) finalizeGo();
+        else { S.turn = BLACK; tip("对方已确认，请你也点「确认」"); }
+        afterMove();
+      }
+    } else if (t === "deadNo") {
+      if (S.type === "go" && S.phase === "dead") {
+        S.phase = "play"; S.dead = []; S.deadOk = { 1: false, 2: false }; S.passes = 0;
+        afterMove();
+      }
+    }
+  }
+
+  function guestAct(obj) {
+    obj.pid = myPid;
+    netPub("act", obj);
+  }
+
+  function enterRoom(room, host) {
+    online = true; isHost = host; roomCode = room;
+    myPid = "p" + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+    myName = readName();
+    seats = { b: null, w: null };
+    $("roomtag").classList.add("on");
+    $("roomcode").textContent = room;
+    $("bLeave").style.display = "";
+    netStEl = $("netSt");
+    netSt("正在连接中继…");
+    $("ov").classList.add("hidden");
+
+    loadMqtt(function (ok) {
+      if (!ok) { netSt("mqtt.js 加载失败（CDN 被拦）。可以先用单机模式。"); return; }
+      netConnect(function () {
+        netPub("join", { pid: myPid, nick: myName }, true);
+        if (host) {
+          seats.b = { pid: myPid, name: myName };
+          myRole = "b";
+          S = newState(cfg.ntype, cfg.nsize);
+          S.mode = "online";
+          S.names = { 1: myName, 2: "???" };
+          netSt("房间 <b>" + esc(room) + "</b> 已创建，你执<b>黑</b>先行。把房间码发给朋友，对方加入后点「重新开局」开始。");
+          updatePanel();
+          syncUI();
+        } else {
+          myRole = "s";
+          netSt("已进入房间 <b>" + esc(room) + "</b>，等待房主开局…");
+        }
+        /* 心跳：客人一直喊到被安排座位；房主定期重播状态 */
+        var beat = setInterval(function () {
+          if (!online) { clearInterval(beat); return; }
+          if (!isHost) netPub("join", { pid: myPid, nick: myName }, true);
+          if (isHost) {
+            if (Date.now() - lastBcast > 2000) bcast();
+            /* 对手掉线判定 */
+            if (seats.w && S && !S.over) {
+              var away = Date.now() - lastSeen.w;
+              if (away > 20000 && away < 22000) { tip("对手可能掉线了…"); sync(); }
+              if (away > 90000) {
+                S.over = true; S.phase = "over";
+                S.result = { winner: BLACK, reason: "对手掉线" };
+                afterMove();
+              }
+            }
+          }
+        }, 2500);
+      });
+    });
+    window.addEventListener("beforeunload", function () {
+      if (online) netPub("join", { pid: myPid, nick: myName, bye: 1 });
+    });
+  }
+
+  function leaveRoom() {
+    if (online && Net.cli && Net.ready) netPub("join", { pid: myPid, bye: 1 });
+    online = false; isHost = false; roomCode = "";
+    $("roomtag").classList.remove("on");
+    $("bLeave").style.display = "none";
+    location.reload();
+  }
+
+  /* ================================================================
+     6. 音效（WebAudio 合成，无外部素材）
+     ================================================================ */
+  var AC = null;
+  function beep(freq, dur, vol) {
+    if (!sound) return;
+    try {
+      AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+      if (AC.state === "suspended") AC.resume();
+      var o = AC.createOscillator(), g = AC.createGain();
+      o.frequency.value = freq; o.type = "sine"; g.gain.value = vol || .08;
+      o.connect(g); g.connect(AC.destination);
+      o.start(); g.gain.exponentialRampToValueAtTime(.0001, AC.currentTime + dur);
+      o.stop(AC.currentTime + dur);
+    } catch (e) { }
+  }
+
+  /* ================================================================
+     7. 渲染
+     ================================================================ */
+  var cv = $("cv"), ctx = cv.getContext("2d");
+  var dpr = 1, cellPx = 20, marginPx = 30, boardPx = 400;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var wrap = $("boardWrap");
+    var avail = Math.max(220, Math.min(wrap.clientWidth, wrap.clientHeight) - 8);
+    marginPx = Math.max(24, avail * 0.052);
+    cellPx = (avail - marginPx * 2) / (S.size - 1);
+    boardPx = (S.size - 1) * cellPx + marginPx * 2;
+    cv.width = Math.round(boardPx * dpr); cv.height = Math.round(boardPx * dpr);
+    cv.style.width = boardPx + "px"; cv.style.height = boardPx + "px";
+  }
+  window.addEventListener("resize", function () { resize(); });
+
+  function starPoints(size) {
+    if (size === 19) { var a = [3, 9, 15], r = []; for (var i = 0; i < 3; i++) for (var j = 0; j < 3; j++) r.push([a[i], a[j]]); return r; }
+    if (size === 13) { var b = [3, 6, 9], r2 = []; for (var i2 = 0; i2 < 3; i2++) for (var j2 = 0; j2 < 3; j2++) r2.push([b[i2], b[j2]]); return r2; }
+    if (size === 9) return [[2, 2], [2, 6], [6, 2], [6, 6], [4, 4]];
+    /* 五子棋 15 路 */
+    return [[3, 3], [3, 11], [11, 3], [11, 11], [7, 7]];
+  }
+
+  function px(x) { return marginPx + x * cellPx; }
+  function py(y) { return marginPx + y * cellPx; }
+
+  function drawStone(cx, cy, r, c, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha == null ? 1 : alpha;
+    ctx.shadowColor = "rgba(0,0,0,.4)"; ctx.shadowBlur = r * .35; ctx.shadowOffsetY = r * .12;
+    var g = ctx.createRadialGradient(cx - r * .35, cy - r * .35, r * .1, cx, cy, r);
+    if (c === BLACK) { g.addColorStop(0, "#5a5a5a"); g.addColorStop(.5, "#1c1c1c"); g.addColorStop(1, "#000"); }
+    else { g.addColorStop(0, "#ffffff"); g.addColorStop(.7, "#f0f0f0"); g.addColorStop(1, "#c2c2c2"); }
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.29); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawBoard() {
+    var size = S.size;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    /* 木纹底 */
+    var bg = ctx.createLinearGradient(0, 0, boardPx, boardPx);
+    bg.addColorStop(0, "#e8bd7a"); bg.addColorStop(.5, "#dfae64"); bg.addColorStop(1, "#d19e52");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, boardPx, boardPx);
+    ctx.strokeStyle = "rgba(120,80,30,.18)"; ctx.lineWidth = 1;
+    for (var w = 0; w < 7; w++) {                                   /* 假木纹 */
+      ctx.beginPath();
+      ctx.moveTo(0, w * boardPx / 7 + Math.sin(w * 2.3) * 8);
+      ctx.bezierCurveTo(boardPx * .3, w * boardPx / 7 - 10, boardPx * .6, w * boardPx / 7 + 12, boardPx, w * boardPx / 7 - 6);
+      ctx.stroke();
+    }
+    /* 网格 */
+    ctx.strokeStyle = "rgba(60,36,8,.75)";
+    for (var i = 0; i < size; i++) {
+      ctx.lineWidth = (i === 0 || i === size - 1) ? 2 : 1;
+      ctx.beginPath(); ctx.moveTo(px(0), py(i)); ctx.lineTo(px(size - 1), py(i)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px(i), py(0)); ctx.lineTo(px(i), py(size - 1)); ctx.stroke();
+    }
+    /* 星位 */
+    var sp = starPoints(size);
+    ctx.fillStyle = "rgba(60,36,8,.85)";
+    for (var s = 0; s < sp.length; s++) {
+      ctx.beginPath(); ctx.arc(px(sp[s][0]), py(sp[s][1]), Math.max(2.5, cellPx * .09), 0, 6.29); ctx.fill();
+    }
+    /* 坐标 */
+    ctx.fillStyle = "rgba(60,36,8,.65)";
+    ctx.font = Math.max(9, Math.round(cellPx * .42)) + "px Consolas, monospace";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (var c = 0; c < size; c++) {
+      ctx.fillText(LETTERS[c], px(c), py(0) - marginPx * .62);
+      ctx.fillText(LETTERS[c], px(c), py(size - 1) + marginPx * .62);
+      ctx.fillText(String(size - c), px(0) - marginPx * .62, py(c));
+      ctx.fillText(String(size - c), px(size - 1) + marginPx * .62, py(c));
+    }
+    /* 棋子 */
+    var r = cellPx * .46;
+    for (var y = 0; y < size; y++) for (var x = 0; x < size; x++) {
+      var v = S.board[idx(x, y)];
+      if (v === EMPTY) continue;
+      var dead = S.dead.indexOf(idx(x, y)) >= 0;
+      drawStone(px(x), py(y), r, v, dead ? .3 : 1);
+      if (dead) {
+        ctx.strokeStyle = "rgba(210,50,40,.9)"; ctx.lineWidth = Math.max(1.5, r * .18);
+        var d = r * .55;
+        ctx.beginPath(); ctx.moveTo(px(x) - d, py(y) - d); ctx.lineTo(px(x) + d, py(y) + d); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px(x) + d, py(y) - d); ctx.lineTo(px(x) - d, py(y) + d); ctx.stroke();
+      }
+    }
+    /* 终局数目标记 */
+    if ((S.phase === "over" && S.result && S.result.reason === "数目") || (S.type === "go" && S.phase === "dead")) {
+      var b = S.board.slice();
+      if (S.phase === "over") for (var dd = 0; dd < S.dead.length; dd++) b[S.dead[dd]] = EMPTY;
+      var vis = new Uint8Array(size * size);
+      for (var t = 0; t < b.length; t++) {
+        if (b[t] !== EMPTY || vis[t]) continue;
+        var stack = [t], tb = false, tw = false, cells = [];
+        vis[t] = 1;
+        while (stack.length) {
+          var k = stack.pop(); cells.push(k);
+          var kx = k % size, ky = (k - kx) / size;
+          var nb = goNeighbors(size, kx, ky);
+          for (var q = 0; q < nb.length; q++) {
+            var m = nb[q];
+            if (b[m] === BLACK) tb = true; else if (b[m] === WHITE) tw = true;
+            else if (!vis[m]) { vis[m] = 1; stack.push(m); }
+          }
+        }
+        if ((tb && !tw) || (tw && !tb)) {
+          ctx.fillStyle = tb ? "rgba(20,20,20,.32)" : "rgba(255,255,255,.42)";
+          for (var cc = 0; cc < cells.length; cc++) {
+            var ex = cells[cc] % size, ey = (cells[cc] - ex) / size;
+            var sq = cellPx * .17;
+            ctx.fillRect(px(ex) - sq, py(ey) - sq, sq * 2, sq * 2);
+          }
+        }
+      }
+    }
+    /* 最后一手 */
+    if (S.last && S.last.x >= 0) {
+      ctx.strokeStyle = "#d33a2c"; ctx.lineWidth = Math.max(1.6, cellPx * .09);
+      ctx.beginPath(); ctx.arc(px(S.last.x), py(S.last.y), r * .42, 0, 6.29); ctx.stroke();
+    }
+    /* 五连连线 */
+    if (S.winLine) {
+      ctx.strokeStyle = "rgba(211,58,44,.9)"; ctx.lineWidth = Math.max(2.5, cellPx * .14);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(px(S.winLine[0][0]), py(S.winLine[0][1]));
+      ctx.lineTo(px(S.winLine[S.winLine.length - 1][0]), py(S.winLine[S.winLine.length - 1][1]));
+      ctx.stroke();
+    }
+    /* 悬停虚影 */
+    if (hover && canPlayAt(hover.x, hover.y) && isMyTurn()) {
+      var hx = px(hover.x), hy = py(hover.y);
+      ctx.save();
+      ctx.globalAlpha = .38;
+      drawStone(hx, hy, r, S.turn, .55);
+      ctx.restore();
+      ctx.strokeStyle = "rgba(211,58,44,.5)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx - r * 1.5, hy); ctx.lineTo(hx + r * 1.5, hy);
+      ctx.moveTo(hx, hy - r * 1.5); ctx.lineTo(hx, hy + r * 1.5); ctx.stroke();
+    }
+  }
+
+  /* ================================================================
+     8. 侧栏 / 提示 / 结算
+     ================================================================ */
+  function playerName(c) {
+    if (S.mode === "online") {
+      var s = c === BLACK ? seats.b : seats.w;
+      return s ? s.name : colorName(c);
+    }
+    if (S.mode === "single") {
+      if (S.opp === "local") return c === BLACK ? myName : "白方";
+      return c === BLACK ? myName : "Sayuri 小百合";
+    }
+    return colorName(c);
+  }
+  function myColor() {
+    if (S.mode === "online") return myRole === "b" ? BLACK : (myRole === "w" ? WHITE : 0);
+    return S.mode === "single" ? BLACK : 0;
+  }
+  function isMyTurn() {
+    if (!S || S.over || S.phase !== "play") return false;
+    if (S.mode === "single") return S.opp === "local" || S.turn === BLACK;
+    if (S.mode === "online") return myRole === colorChar(S.turn);
+    return false;
+  }
+
+  function updatePanel() {
+    if (!S) return;
+    /* 玩家卡 */
+    var html = "";
+    for (var c = 1; c <= 2; c++) {
+      var me = myColor() === c;
+      var off = S.mode === "online" && c === WHITE && seats.w && Date.now() - lastSeen.w > 20000 && !S.over;
+      html += '<div class="pl' + (S.turn === c && !S.over ? " turn" : "") + (off ? " offline" : "") + '">' +
+        '<span class="dot ' + (c === BLACK ? "b" : "w") + '"></span>' +
+        '<span class="nm">' + esc(playerName(c)) + (me ? "（你）" : "") + "</span>" +
+        '<span class="tag">' + (S.type === "go" ? "提子 " + S.caps[c - 1] : colorName(c)) + "</span></div>";
+    }
+    if (S.mode === "online" && myRole === "s") html += '<div class="pl"><span class="nm" style="opacity:.6">观战中 — 等待下一局</span></div>';
+    $("players").innerHTML = html;
+    /* 棋谱 */
+    var log = "";
+    for (var i = 0; i < S.moves.length; i++) {
+      var m = S.moves[i];
+      var txt = m.x < 0 ? "虚手" : coord(m.x, m.y);
+      log += '<div><span class="mv ' + (m.c === BLACK ? "b" : "w") + '">' + (i + 1) + ". " + colorName(m.c) + "</span>" + txt + "</div>";
+    }
+    var el = $("log");
+    el.innerHTML = log || '<span style="opacity:.45">还没有落子</span>';
+    el.scrollTop = el.scrollHeight;
+    /* 规则卡 */
+    $("rules").innerHTML = S.type === "gomoku" ? rulesGomo() : rulesGo();
+    /* 顶栏统计 */
+    var st = S.type === "gomoku"
+      ? "五子棋 " + S.size + "×" + S.size + " · 第 " + (S.moves.length + 1) + " 手"
+      : "围棋 " + S.size + " 路 · 第 " + (S.moves.length + 1) + " 手 · 提子 黑" + S.caps[0] + " 白" + S.caps[1];
+    if (S.mode === "single" && S.opp === "ai") st += " · AI " + DIFF_NAME[S.diff];
+    if (S.mode === "online") st += " · " + (myRole === "b" ? "黑(房主)" : myRole === "w" ? "白" : "观战") + " " + roomCode;
+    $("stat").textContent = st;
+    /* 按钮显隐 */
+    var menu = S.mode === "menu";
+    $("bPass").style.display = (!menu && S.type === "go" && !S.over && (S.phase === "play" || S.phase === "dead")) ? "" : "none";
+    $("bPass").textContent = S.phase === "dead" ? "确认" : "虚手";
+    $("bResign").textContent = S.phase === "dead" ? "继续对弈" : "认输";
+    $("bUndo").style.display = (!menu && S.mode === "single" && !S.over && S.phase !== "dead") ||
+      (!menu && S.mode === "online" && !S.over && S.phase !== "dead" && S.moves.length > 0) ? "" : "none";
+    $("bResign").disabled = S.over || menu;
+    $("bRestart").disabled = !!(S.mode === "online" && !isHost) || menu;
+  }
+
+  function rulesGomo() {
+    return "<h3>五子棋规则</h3>" +
+      "横、竖、斜任意方向先连成 <em>五子</em> 者胜（无禁手，长连也算）。<br>" +
+      "15×15 棋盘，<em>黑棋先行</em>，双方轮流落子不能悔棋（点顶栏「悔棋」可以撤）。<br>" +
+      "电脑对手：先算杀招（自己能赢 / 你要赢的点），再按棋型权重做 <em>2~4 层博弈树搜索</em>。";
+  }
+  function rulesGo() {
+    return "<h3>围棋规则</h3>" +
+      "气尽则提；<em>禁止自杀</em>；打劫不能立即回提。<br>" +
+      "虚手跳过一手，<em>双方连续虚手</em>进入终局盘点：点击对方棋子标死子，双方确认后数目。<br>" +
+      "<em>中国规则数子法</em>：黑 = 盘上黑子 + 黑空，白 = 盘上白子 + 白空 + 贴目 " + KOMI + "。<br>" +
+      "电脑对手：叫吃 / 逃子的启发式评估，困难档会躲开「一步被提」的坏点。";
+  }
+
+  function tip(t) { tipLock = Date.now() + 2500; $("tip").textContent = t; }
+  function tipText() {
+    if (!S) return "填个昵称，选好棋种和模式，就可以开局";
+    if (S.phase === "dead") return "终局盘点：点对方棋子标死子，双方「确认」后数目";
+    if (S.over) return S.result ? colorName(S.result.winner) + " " + S.result.reason : "对局结束";
+    if (S.mode === "online" && myRole === "s") return "观战中 — 等房主开局";
+    if (isMyTurn()) return S.type === "go" ? "轮到你落子（左上角按钮可虚手）" : "轮到你落子";
+    if (S.mode === "single" && S.opp === "ai") return "Sayuri 小百合思考中…";
+    return "等待 " + playerName(other(S.turn)) + " 落子…";
+  }
+  function syncUI() {
+    var t = tipText();
+    var el = $("tip");
+    el.textContent = t;
+    if (isMyTurn()) el.classList.add("myturn"); else el.classList.remove("myturn");
+    updatePanel();
+  }
+
+  function showResult() {
+    if (!S.result) return;
+    var r = S.result, mc = myColor();
+    var win = r.winner === 0 ? null : (mc === r.winner);
+    var title;
+    if (r.winner === 0) title = "和棋";
+    else if (S.mode === "single" && S.opp === "local") title = colorName(r.winner) + "获胜";
+    else if (S.mode === "online" && myRole === "s") title = colorName(r.winner) + "获胜";
+    else if (S.mode === "single" && S.opp === "ai") title = win ? "你赢了！" : "你输了";
+    else title = win ? "你赢了！" : colorName(r.winner) + "获胜";
+    $("resTitle").textContent = title;
+    $("resTitle").className = r.winner === 0 ? "draw" : (win ? "win" : "lose");
+    var det = "";
+    if (r.reason === "数目" && r.score) {
+      det = "数目结果：<b>黑 " + r.score.black + " : 白 " + r.score.white + "</b>（贴目 " + KOMI + "）<br>" +
+        "盘上 黑" + r.score.bs + " 子 / 白" + r.score.ws + " 子，空地 黑" + r.score.bt + " / 白" + r.score.wt +
+        (r.score.dead && r.score.dead.length ? "，提取死子 " + r.score.dead.length + " 颗" : "");
+    } else {
+      det = colorName(r.winner) + " · " + esc(r.reason);
+    }
+    $("resDetail").innerHTML = det;
+    $("bAgain").style.display = (S.mode === "single" || isHost) ? "" : "none";
+    $("res").classList.remove("hidden");
+    beep(r.winner === 0 ? 440 : 660, .25, .12);
+  }
+  function hideResult() { $("res").classList.add("hidden"); }
+
+  /* ================================================================
+     9. 交互
+     ================================================================ */
+  function toCell(ev) {
+    var r = cv.getBoundingClientRect();
+    var x = Math.round((ev.clientX - r.left - r.width * (marginPx / boardPx)) / (r.width * (cellPx / boardPx)));
+    var y = Math.round((ev.clientY - r.top - r.height * (marginPx / boardPx)) / (r.height * (cellPx / boardPx)));
+    return { x: x, y: y };
+  }
+
+  cv.addEventListener("pointermove", function (ev) {
+    if (!S) return;
+    var p = toCell(ev);
+    hover = (p.x >= 0 && p.y >= 0 && p.x < S.size && p.y < S.size) ? p : null;
+  });
+  cv.addEventListener("pointerleave", function () { hover = null; });
+
+  cv.addEventListener("pointerdown", function (ev) {
+    if (!S) return;
+    ev.preventDefault();
+    var p = toCell(ev);
+    if (p.x < 0 || p.y < 0 || p.x >= S.size || p.y >= S.size) return;
+
+    /* 终局盘点：标死子 */
+    if (S.type === "go" && S.phase === "dead") {
+      if (S.mode === "online" && myRole === "s") return;
+      var i = idx(p.x, p.y);
+      if (S.board[i] === EMPTY || S.board[i] === myColor()) return;   // 只能标对方的子
+      if (S.mode === "online") {
+        if (myRole === "w") guestAct({ t: "dead", x: p.x, y: p.y });
+        else toggleDead(p.x, p.y), afterMove();
+      } else {
+        toggleDead(p.x, p.y); afterMove();
+      }
+      return;
+    }
+    if (!isMyTurn()) return;
+    if (S.mode === "online" && myRole === "w") {
+      if (!canPlayAt(p.x, p.y)) return;
+      guestAct({ t: "move", x: p.x, y: p.y });
+      hover = null;
+      return;
+    }
+    doMove(p.x, p.y);
+  });
+
+  /* ---- 顶栏按钮 ---- */
+  $("bUndo").addEventListener("click", function () {
+    if (!S || S.over || S.phase === "dead" || S.mode === "menu") return;
+    if (S.mode === "single") {
+      if (S.opp === "local") { if (undoOne()) afterMove(); }
+      else { undoToRequester(BLACK); afterMove(); }
+      return;
+    }
+    if (S.mode === "online") {
+      if (isHost) {
+        if (undoReqPid) { undoReqPid = null; $("bUndo").classList.remove("blink"); }
+        undoToRequester(WHITE);
+        afterMove();
+      } else if (myRole === "w") {
+        guestAct({ t: "undoReq" });
+        tip("已发送悔棋请求，等待房主同意…");
+      }
+    }
+  });
+  $("bPass").addEventListener("click", function () {
+    if (!S || S.type !== "go") return;
+    /* 终局盘点阶段这个按钮是「确认」 */
+    if (S.phase === "dead") { confirmDeadMine(); return; }
+    if (!isMyTurn() || S.phase !== "play") return;
+    if (S.mode === "online" && myRole === "w") { guestAct({ t: "pass" }); return; }
+    doPass();
+  });
+  $("bResign").addEventListener("click", function () {
+    if (!S || S.over || !S.mode || S.mode === "menu") return;
+    /* 终局盘点阶段这个按钮是「继续对弈」 */
+    if (S.phase === "dead") { resumePlay(); return; }
+    if (S.mode === "online") {
+      if (myRole === "s") return;
+      if (myRole === "w") { guestAct({ t: "resign" }); return; }
+      doResign(BLACK);
+      return;
+    }
+    if (S.opp === "local") doResign(S.turn); else doResign(BLACK);
+  });
+  $("bRestart").addEventListener("click", function () {
+    if (!S) return;
+    if (S.mode === "single") {
+      var t = S.type, sz = S.size;
+      S = newState(t, sz);
+      S.mode = "single"; S.opp = cfg.opp; S.diff = cfg.diff;
+      hideResult(); resize(); updatePanel(); syncUI();
+    } else if (S.mode === "online" && isHost) {
+      var t2 = S.type, sz2 = S.size;
+      S = newState(t2, sz2);
+      S.mode = "online";
+      hideResult(); resize(); afterMove();
+      netSt("新的一局开始了，你执<b>黑</b>先行。");
+    }
+  });
+  $("bSound").addEventListener("click", function () {
+    sound = !sound;
+    this.textContent = sound ? "🔊" : "🔇";
+  });
+  $("bMenu").addEventListener("click", function () { location.reload(); });
+  $("bLeave").addEventListener("click", leaveRoom);
+  $("roomcode").parentNode.addEventListener("click", function () {
+    var txt = roomCode;
+    if (!txt) return;
+    try {
+      if (navigator.clipboard) navigator.clipboard.writeText(txt);
+      else {
+        var ta = document.createElement("textarea");
+        ta.value = txt; document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); document.body.removeChild(ta);
+      }
+      tip("房间码 " + txt + " 已复制，发给朋友吧");
+    } catch (e) { }
+  });
+
+  /* ================================================================
+     10. 开始界面
+     ================================================================ */
+  function readName() {
+    var v = ($("inName").value || "").trim().slice(0, 8);
+    if (!v) v = localStorage.getItem("qiyuan_name") || "";
+    if (!v) v = "棋友" + Math.floor(1000 + Math.random() * 9000);
+    try { localStorage.setItem("qiyuan_name", v); } catch (e) { }
+    return v;
+  }
+
+  function bindOpts(container, attr, cb) {
+    /* 只绑定带对应 data-* 属性的按钮，避免点了其他行的按钮后
+       用 getAttribute(attr)===null 把 cfg 里的值覆盖成 null/NaN */
+    var btns = container.querySelectorAll("[" + attr + "]");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", function () {
+        var sibs = this.parentNode.querySelectorAll(".opt");
+        for (var j = 0; j < sibs.length; j++) sibs[j].classList.remove("on");
+        this.classList.add("on");
+        cb(this.getAttribute(attr));
+      });
+    }
+  }
+
+  bindOpts($("pSingle"), "data-type", function (v) {
+    cfg.type = v;
+    $("rowSize").style.display = v === "go" ? "" : "none";
+  });
+  bindOpts($("pSingle"), "data-size", function (v) { cfg.size = parseInt(v, 10); });
+  bindOpts($("pSingle"), "data-opp", function (v) {
+    cfg.opp = v;
+    $("rowDiff").style.display = v === "ai" ? "" : "none";
+  });
+  bindOpts($("pSingle"), "data-diff", function (v) { cfg.diff = parseInt(v, 10); });
+  bindOpts($("pNet"), "data-ntype", function (v) {
+    cfg.ntype = v;
+    $("rowNSize").style.display = v === "go" ? "" : "none";
+  });
+  bindOpts($("pNet"), "data-nsize", function (v) { cfg.nsize = parseInt(v, 10); });
+
+  $("mSingle").addEventListener("click", function () {
+    this.classList.add("on"); $("mNet").classList.remove("on");
+    $("pSingle").classList.remove("hidden"); $("pNet").classList.add("hidden");
+  });
+  $("mNet").addEventListener("click", function () {
+    this.classList.add("on"); $("mSingle").classList.remove("on");
+    $("pNet").classList.remove("hidden"); $("pSingle").classList.add("hidden");
+  });
+
+  $("bStartSingle").addEventListener("click", function () {
+    myName = readName();
+    var size = cfg.type === "gomoku" ? 15 : cfg.size;
+    S = newState(cfg.type, size);
+    S.mode = "single"; S.opp = cfg.opp; S.diff = cfg.diff;
+    hideResult();
+    $("ov").classList.add("hidden");
+    resize(); updatePanel(); syncUI();
+    if (cfg.opp === "ai") scheduleAi();
+  });
+
+  function randRoom() {
+    var s = "ABCDEFGHJKMNPQRSTUVWXYZ23456789", out = "";
+    for (var i = 0; i < 4; i++) out += s[Math.floor(Math.random() * s.length)];
+    return out;
+  }
+  function readRoom() {
+    var v = ($("inRoom").value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return v.length >= 3 ? v.slice(0, 8) : null;
+  }
+  function doEnter(host) {
+    var room = readRoom();
+    if (!room) { netStEl = $("netSt"); netSt("房间码至少 <b>3</b> 位（字母或数字），或者留空让我帮你生成一个。"); return; }
+    enterRoom(room, host);
+  }
+  $("bCreate").addEventListener("click", function () {
+    if (!readRoom()) $("inRoom").value = randRoom();
+    doEnter(true);
+  });
+  $("bJoin").addEventListener("click", function () { doEnter(false); });
+  $("inRoom").addEventListener("keydown", function (e) { if (e.key === "Enter") doEnter(false); });
+  $("inName").addEventListener("keydown", function (e) { if (e.key === "Enter") $("bStartSingle").click(); });
+
+  /* ---- 结算界面按钮 ---- */
+  $("bAgain").addEventListener("click", function () { $("bRestart").click(); });
+  $("bResMenu").addEventListener("click", function () { location.reload(); });
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[c];
+    });
+  }
+
+  /* ================================================================
+     11. 主循环
+     ================================================================ */
+  var tipLock = 0;
+  function frame() {
+    requestAnimationFrame(frame);
+    if (!S) return;
+    tickSync();
+    drawBoard();
+    /* 提示条：tip() 发的临时消息锁定 2.5 秒，期间不被 tipText 覆盖 */
+    if (Date.now() > tipLock) {
+      var t = tipText();
+      $("tip").textContent = t;
+      if (isMyTurn()) $("tip").classList.add("myturn"); else $("tip").classList.remove("myturn");
+    }
+    /* 联机掉线检测的即时刷新 */
+    if (online && !isHost && Net.cli && !Net.ready) {
+      $("tip").textContent = "与中继的连接中断了，尝试重连…";
+    }
+  }
+
+  /* 初始：菜单后面垫一块棋盘当背景 */
+  try { myName = localStorage.getItem("qiyuan_name") || ""; } catch (e) { }
+  $("inName").value = myName;
+  S = newState("gomoku", 15);
+  S.mode = "menu";
+  resize();
+  updatePanel();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

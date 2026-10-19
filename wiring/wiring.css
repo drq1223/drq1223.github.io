@@ -1,0 +1,45 @@
+.wr-card {
+  border: 1px solid rgba(127,127,127,.22);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin: 14px 0 18px;
+  background: rgba(127,127,127,.08);
+}
+.wr-card h3 { margin: 0 0 10px; font-size: 15px; }
+.wr-card ul { margin: 0; padding-left: 20px; }
+.wr-card li { margin: 4px 0; line-height: 1.75; }
+.wr-note { margin: 10px 0 0; font-size: 12.5px; opacity: .7; line-height: 1.7; }
+.wr-keys {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 7px;
+  margin: 0 2px;
+  border-radius: 6px;
+  border: 1px solid rgba(127,127,127,.35);
+  background: rgba(127,127,127,.14);
+  font-size: 12px;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.wr-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0 16px; }
+.wr-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 18px; border-radius: 10px;
+  border: 1px solid rgba(127,127,127,.3);
+  background: rgba(232,68,58,.16);
+  cursor: pointer; font-size: 14px; line-height: 1.4;
+}
+.wr-btn:hover { background: rgba(232,68,58,.3); }
+.wr-btn.ghost { background: rgba(127,127,127,.12); }
+.wr-btn.ghost:hover { background: rgba(127,127,127,.24); }
+.wr-link { font-size: 13px; opacity: .75; }
+/* 游戏画布是 1000×620 的逻辑尺寸，舞台按同比例给，避免上下留黑边 */
+.wr-stage { position: relative; width: 100%; aspect-ratio: 1000 / 620; border-radius: 14px; overflow: hidden; background: #12151b; }
+/* overscroll-behavior: contain —— 在 iframe 里拖拽连线产生的滚动量不要外溢到博客页，
+   否则会被浏览器当成「滑动前进/后退」手势，页面会莫名跳转 */
+.wr-stage iframe { display: block; width: 100%; height: 100%; border: 0; overscroll-behavior: contain; touch-action: none; }
+.wr-stage:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; border-radius: 0; }
+.wr-stage:-webkit-full-screen { width: 100vw; height: 100vh; border-radius: 0; }
+html.wr-playing { overscroll-behavior: none; }
+.wr-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #cfd3dc; gap: 10px; text-align: center; padding: 20px; box-sizing: border-box; }
+.wr-placeholder strong { font-size: 15px; color: #fff; }
+.wr-placeholder span { font-size: 13px; opacity: .8; }

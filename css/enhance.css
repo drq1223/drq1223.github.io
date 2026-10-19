@@ -1,0 +1,1268 @@
+/* ==========================================================================
+   Blog Enhance — 博客功能增强样式
+   全部配色沿用 cosy 主题的 CSS 变量，自动跟随亮色 / 暗色模式
+   ========================================================================== */
+
+:root {
+  --enh-radius: 8px;
+  --enh-radius-sm: 6px;
+  --enh-shadow: 0 8px 32px rgba(0, 0, 0, .18);
+}
+
+/* 首页 main 默认 overflow:hidden，有文章列表时需放开滚动。
+   注意选择器必须带上 #app > 前缀：主题里 #app > main{overflow:hidden} 特异性为 (1,0,1)，
+   仅写 main.enh-scrollable（0,1,1）会被主题规则压掉，滚动永远不生效。 */
+#app > main.enh-scrollable {
+  overflow-y: auto;
+}
+
+/* --------------------------------------------------------------------------
+   装饰性背景层不拦截指针事件（首页滚轮失效的根因）
+   .bg-linear-grow 是主题欢迎区的 position:fixed 全屏装饰层（渐变球动画），
+   实测覆盖视口左侧约 60% 区域（含整个侧边栏），默认 pointer-events:auto。
+   滚轮滚到它上面时滚动链终止于外层 main 的 41px 溢出量，
+   内层真正的内容容器 main.cosy-scrollbar（约 1500px）完全滚不动 ——
+   表现为「鼠标停在页面左侧/侧边栏区域时滚轮失灵」。
+   纯装饰层（渐变球 / 上升圆点）一律 pointer-events:none，让滚轮与点击穿透。
+   -------------------------------------------------------------------------- */
+.bg-linear-grow,
+.bg-linear-grow .ball,
+.circles,
+.circles li {
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   1. 顶部阅读进度条
+   -------------------------------------------------------------------------- */
+#enh-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  z-index: 9999;
+  background: var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary);
+  transition: width .08s linear;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   2. 全站搜索
+   -------------------------------------------------------------------------- */
+.enh-search {
+  padding: 8px 12px 12px;
+}
+
+.enh-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--enh-radius-sm);
+  background: var(--color-search-bg, var(--color-bg-2));
+  border: 1px solid var(--color-search-border, var(--color-border));
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+}
+
+.enh-search-box:hover {
+  border-color: var(--color-search-border-hover, var(--color-primary));
+}
+
+.enh-search-box svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--color-icon);
+}
+
+.enh-search-box .enh-search-ph {
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-font-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.enh-kbd {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-short-key-font, var(--color-font-2));
+  background: var(--color-short-key-bg, var(--color-bg-3));
+}
+
+/* 搜索弹窗 */
+#enh-search-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh 16px 16px;
+  background: rgba(0, 0, 0, .45);
+  backdrop-filter: blur(3px);
+}
+
+#enh-search-mask.is-open {
+  display: flex;
+}
+
+.enh-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  max-height: 70vh;
+  border-radius: var(--enh-radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  box-shadow: var(--enh-shadow);
+  overflow: hidden;
+  animation: enh-pop .16s ease-out;
+}
+
+@keyframes enh-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.enh-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.enh-modal-head svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--color-icon);
+}
+
+#enh-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--color-font);
+}
+
+#enh-search-input::placeholder {
+  color: var(--color-font-2);
+}
+
+.enh-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.enh-result {
+  display: block;
+  padding: 10px 12px;
+  border-radius: var(--enh-radius-sm);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.enh-result:hover,
+.enh-result.is-active {
+  background: var(--color-bg-hover);
+}
+
+.enh-result-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-font);
+  margin-bottom: 3px;
+}
+
+.enh-result-title mark {
+  background: transparent;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.enh-result-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-font-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.enh-result-meta {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--color-font-2);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.enh-result-meta .enh-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--color-label-bg, var(--color-bg-2));
+  color: var(--color-label-font, var(--color-font-2));
+}
+
+.enh-empty {
+  padding: 40px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-font-2);
+}
+
+.enh-modal-foot {
+  display: flex;
+  gap: 14px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--color-border);
+  font-size: 11px;
+  color: var(--color-font-2);
+}
+
+.enh-modal-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* --------------------------------------------------------------------------
+   3. 文章元信息（字数 / 阅读时长 / 阅读量）
+   -------------------------------------------------------------------------- */
+.enh-post-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border-2, var(--color-border));
+  font-size: 12px;
+  color: var(--color-font-2);
+}
+
+.enh-post-meta .enh-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.enh-post-meta svg {
+  width: 13px;
+  height: 13px;
+  opacity: .75;
+}
+
+/* --------------------------------------------------------------------------
+   4. 代码块一键复制
+   -------------------------------------------------------------------------- */
+.enh-code-wrap {
+  position: relative;
+}
+
+.enh-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--enh-radius-sm);
+  border: 1px solid var(--color-button-border, var(--color-border));
+  background: var(--color-button-bg, var(--color-bg-2));
+  color: var(--color-button-font, var(--color-font-2));
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .18s, color .18s, border-color .18s;
+}
+
+.enh-code-wrap:hover .enh-copy-btn {
+  opacity: 1;
+}
+
+.enh-copy-btn:hover {
+  color: var(--color-button-font-hover, var(--color-primary));
+  border-color: var(--color-button-border-hover, var(--color-primary));
+}
+
+.enh-copy-btn.is-done {
+  opacity: 1;
+  color: var(--color-green);
+  border-color: var(--color-green);
+}
+
+/* --------------------------------------------------------------------------
+   5. 图片灯箱
+   -------------------------------------------------------------------------- */
+.enh-zoomable {
+  cursor: zoom-in;
+}
+
+#enh-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(0, 0, 0, .82);
+  cursor: zoom-out;
+}
+
+#enh-lightbox.is-open {
+  display: flex;
+}
+
+#enh-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--enh-radius-sm);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, .5);
+  animation: enh-pop .18s ease-out;
+}
+
+/* --------------------------------------------------------------------------
+   6. 亮 / 暗色切换按钮
+   -------------------------------------------------------------------------- */
+.enh-theme-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--color-button-border, var(--color-border));
+  background: var(--color-button-bg, var(--color-bg-2));
+  color: var(--color-button-font, var(--color-font-2));
+  cursor: pointer;
+  transition: color .18s, border-color .18s, transform .18s;
+}
+
+.enh-theme-btn:hover {
+  color: var(--color-button-font-hover, var(--color-primary));
+  border-color: var(--color-button-border-hover, var(--color-primary));
+  transform: rotate(-18deg);
+}
+
+.enh-theme-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.enh-theme-btn .enh-icon-moon {
+  display: none;
+}
+
+.cosy-theme-light .enh-theme-btn .enh-icon-moon {
+  display: block;
+}
+
+.cosy-theme-light .enh-theme-btn .enh-icon-sun {
+  display: none;
+}
+
+/* 侧栏底部按钮组 */
+.enh-aside-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 0 12px;
+}
+
+/* --------------------------------------------------------------------------
+   7. 站点统计（页脚）
+   -------------------------------------------------------------------------- */
+.enh-site-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+  padding: 14px 16px;
+  font-size: 12px;
+  color: var(--color-font-2);
+  border-top: 1px solid var(--color-border-2, var(--color-border));
+}
+
+.enh-site-stats .enh-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.enh-site-stats b {
+  font-weight: 600;
+  color: var(--color-font-1, var(--color-font));
+}
+
+/* --------------------------------------------------------------------------
+   8. 首页最新文章
+   -------------------------------------------------------------------------- */
+.enh-home-posts {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 8px;
+}
+
+.enh-home-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.enh-home-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-font);
+}
+
+.enh-home-head a {
+  font-size: 12px;
+  color: var(--color-font-2);
+  text-decoration: none;
+}
+
+.enh-home-head a:hover {
+  color: var(--color-primary);
+}
+
+.enh-home-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.enh-home-item {
+  display: block;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border-radius: var(--enh-radius);
+  border: 1px solid var(--color-border-2, var(--color-border));
+  background: var(--color-bg);
+  text-decoration: none;
+  color: inherit;
+  transition: transform .18s, border-color .18s, box-shadow .18s;
+}
+
+.enh-home-item:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .1);
+}
+
+.enh-home-item h3 {
+  margin: 0 0 5px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-font);
+}
+
+.enh-home-item p {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--color-font-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.enh-home-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: var(--color-font-2);
+}
+
+.enh-home-info .enh-pin {
+  color: var(--color-primary);
+}
+
+/* --------------------------------------------------------------------------
+   8.5 首页项目卡片（可展开）
+   -------------------------------------------------------------------------- */
+.enh-project {
+  border-radius: var(--enh-radius);
+  border: 1px solid var(--color-border-2, var(--color-border));
+  background: var(--color-bg);
+  overflow: hidden;
+  transition: border-color .18s, box-shadow .18s;
+}
+
+.enh-project:hover {
+  border-color: var(--color-primary);
+}
+
+.enh-project[open] {
+  border-color: var(--color-primary);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .08);
+}
+
+.enh-project-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+  transition: background .18s;
+}
+
+.enh-project-summary::-webkit-details-marker {
+  display: none;
+}
+
+.enh-project-summary:hover {
+  background: var(--color-bg-hover);
+}
+
+.enh-project-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.enh-project-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-font);
+}
+
+.enh-project-desc {
+  font-size: 12.5px;
+  color: var(--color-font-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.enh-project-toggle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  color: var(--color-font-2);
+}
+
+.enh-project-toggle svg {
+  width: 18px;
+  height: 18px;
+  transition: transform .22s;
+}
+
+.enh-project[open] .enh-project-toggle svg {
+  transform: rotate(180deg);
+}
+
+.enh-project-body {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--color-border-2, var(--color-border));
+  animation: enh-fade .2s ease-out;
+}
+
+@keyframes enh-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.enh-project-detail {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-font-1, var(--color-font));
+}
+
+.enh-project-section {
+  margin-top: 14px;
+}
+
+.enh-project-section h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-font-2);
+}
+
+.enh-project-section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.enh-project-section li {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--color-font-1, var(--color-font));
+}
+
+.enh-project-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.enh-project-tools code {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--color-bg-2);
+  font-size: 11.5px;
+  color: var(--color-font-2);
+}
+
+.enh-project-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.enh-stack-tag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--color-primary);
+  font-size: 11.5px;
+  color: var(--color-primary);
+}
+
+.enh-project-link {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.enh-project-link:hover {
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------------------------
+   9. 友链卡片
+   -------------------------------------------------------------------------- */
+/* 标签云 */
+.enh-tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.enh-tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-2, var(--color-border));
+  background: var(--color-bg);
+  font-size: 13px;
+  color: var(--color-font);
+  text-decoration: none;
+  transition: transform .18s, border-color .18s, color .18s;
+}
+
+.enh-tag-item:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.enh-tag-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-bg-2);
+  font-size: 11px;
+  color: var(--color-font-2);
+}
+
+.enh-tag-empty {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--color-font-2);
+}
+.enh-friends {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.enh-friend {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border-radius: var(--enh-radius);
+  border: 1px solid var(--color-border-2, var(--color-border));
+  background: var(--color-bg);
+  text-decoration: none;
+  color: inherit;
+  transition: transform .18s, border-color .18s, box-shadow .18s;
+}
+
+.enh-friend:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .1);
+}
+
+.enh-avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* 有网站图标时：白底圆角 + contain 不裁切。
+   各站 favicon 情况不一（有满底方块、有透明背景、有纯黑 SVG），
+   统一垫白底才能保证浅色/深色主题下都看得清。 */
+.enh-avatar-icon {
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.enh-avatar-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.enh-friend-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.enh-friend-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-font);
+}
+
+.enh-friend-desc {
+  font-size: 12px;
+  color: var(--color-font-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   10. 响应式
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .enh-home-posts {
+    padding: 16px 14px 4px;
+  }
+
+  #enh-search-mask {
+    padding: 6vh 10px 10px;
+  }
+
+  .enh-modal-foot {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   11. 点击特效
+   -------------------------------------------------------------------------- */
+.enh-click-fx {
+  position: fixed;
+  z-index: 10002;
+  pointer-events: none;
+  user-select: none;
+  line-height: 1;
+  will-change: transform, opacity;
+}
+
+/* 爱心 / 文字模式 */
+.enh-click-fx.is-icon {
+  font-size: 18px;
+}
+
+.enh-click-fx.is-text {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-primary);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .25);
+}
+
+/* 粒子模式 */
+.enh-click-fx.is-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* 涟漪模式 */
+.enh-click-fx.is-ripple {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--color-primary);
+}
+
+/* --------------------------------------------------------------------------
+   12. 首页天气小组件（Open-Meteo，无需 API key）
+   -------------------------------------------------------------------------- */
+.enh-weather {
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 330px;
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 14px 18px 12px;
+  border-radius: 16px;
+  background: var(--color-popup-bg, rgba(30, 32, 45, .62));
+  border: 1px solid var(--color-popup-border, rgba(255, 255, 255, .08));
+  backdrop-filter: blur(16px) saturate(170%);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, .28);
+  color: var(--color-font);
+  z-index: 5;
+  animation: enh-wx-in .6s ease-out .5s backwards;
+  transition: transform .25s, box-shadow .25s;
+}
+
+.enh-weather:hover {
+  transform: translateX(-50%) translateY(-3px);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, .34);
+}
+
+@keyframes enh-wx-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(.85);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.enh-wx-time {
+  font-size: 12px;
+  color: var(--color-font-2);
+  letter-spacing: .4px;
+}
+
+.enh-wx-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.enh-wx-temp {
+  font-size: 38px;
+  font-weight: 300;
+  line-height: 1.1;
+  color: var(--color-font);
+}
+
+.enh-wx-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.enh-wx-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.enh-wx-city {
+  font-size: 12px;
+  color: var(--color-font-2);
+}
+
+.enh-wx-days {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-2, rgba(255, 255, 255, .08));
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.enh-wx-days::-webkit-scrollbar {
+  display: none;
+}
+
+.enh-wx-day {
+  flex: 1;
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 2px;
+  border-radius: 8px;
+}
+
+.enh-wx-day.is-today {
+  background: var(--color-bg-hover);
+}
+
+.enh-wx-week {
+  font-size: 11px;
+  color: var(--color-font-2);
+}
+
+.enh-wx-dicon {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.enh-wx-range {
+  font-size: 10.5px;
+  color: var(--color-font-2);
+  white-space: nowrap;
+}
+
+.enh-wx-range b {
+  font-weight: 600;
+  color: var(--color-font-1, var(--color-font));
+}
+
+.enh-wx-error {
+  font-size: 12px;
+  color: var(--color-font-2);
+  padding: 8px 0 2px;
+}
+
+/* 评论区标题：utterances 本身只输出一个裸 iframe，
+   跟在文章列表后面时没有任何标识，容易被当成空白区域忽略掉 */
+.comments-wrap { margin-top: 30px; }
+.comments-title {
+  font-size: 17px; font-weight: 800; letter-spacing: 1px;
+  margin: 0 0 6px;
+}
+.comments-hint {
+  font-size: 12.5px; line-height: 1.75;
+  color: var(--color-font-2);
+  margin: 0 0 16px;
+}
+
+/* --------------------------------------------------------------------------
+   13. 首页音乐小组件（Apple Music 嵌入 / 本地音频）
+   -------------------------------------------------------------------------- */
+/* 文档流布局：音乐卡排在「最新评论」弹幕正下方，随弹幕一起上移进首屏，
+   任何屏高都不会与弹幕重叠。main 前缀提升权重，压过 liquid-glass 的 .enh-music */
+main .enh-music {
+  width: min(660px, calc(100% - 32px));
+  margin: 0 auto 18px;
+  padding: 12px 12px 10px;
+  border-radius: 18px;
+  background: var(--color-popup-bg, rgba(30, 32, 45, .62));
+  border: 1px solid var(--color-popup-border, rgba(255, 255, 255, .08));
+  box-shadow: 0 14px 44px rgba(0, 0, 0, .28);
+  color: var(--color-font);
+  animation: enh-music-in .55s ease-out .3s backwards;
+}
+
+/* 弹幕缺席时（utterances 关闭 / 评论尚未拉到手），音乐卡顶到弹幕应在的位置，
+   与弹幕出现时对齐同一水平线 */
+.welcome + .enh-music,
+.danmaku-box[hidden] + .enh-music {
+  margin-top: -22.3vh;
+}
+
+@keyframes enh-music-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.enh-music-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px 11px;
+}
+
+.enh-music-ico {
+  display: flex;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--color-primary);
+}
+
+.enh-music-ico svg { width: 100%; height: 100%; }
+
+/* ---- 专辑封面（网易云）---- */
+.enh-music-cover {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .30);
+  border: 1px solid var(--color-popup-border, rgba(255, 255, 255, .18));
+}
+
+/* 播放时封面前头像唱片一样转 */
+.enh-music:has(.enh-music-btn[data-playing]) .enh-music-cover {
+  animation: enh-music-spin 14s linear infinite;
+}
+
+@keyframes enh-music-spin {
+  to { transform: rotate(360deg); }
+}
+
+.enh-music-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.enh-music-artist {
+  font-size: 11.5px;
+  color: var(--color-font-2);
+  letter-spacing: .3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.enh-music-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.enh-music-tag {
+  flex: none;
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: var(--color-font-2);
+  border: 1px solid var(--color-popup-border, rgba(255, 255, 255, .16));
+  white-space: nowrap;
+}
+
+.enh-music-btn {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--color-font);
+  background: rgba(255, 255, 255, .10);
+  border: 1px solid var(--color-popup-border, rgba(255, 255, 255, .16));
+  transition: background .2s, transform .2s;
+  white-space: nowrap;
+}
+
+.enh-music-btn:hover {
+  background: rgba(255, 255, 255, .18);
+  transform: translateY(-1px);
+}
+
+.enh-music-btn:active { transform: translateY(0); }
+
+.enh-music-btn svg { width: 12px; height: 12px; }
+
+.enh-music-frame { display: block; border: 0; }
+
+/* ---- 本地音频播放器控制条 ---- */
+.enh-music-audio { display: none; }
+
+.enh-music-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 2px;
+}
+
+.enh-music-time,
+.enh-music-duration {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .3px;
+  color: var(--color-font-2);
+  min-width: 34px;
+}
+
+.enh-music-duration { text-align: right; }
+
+.enh-music-progress {
+  flex: 1;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+
+/* 轨道 */
+.enh-music-progress::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .14);
+}
+
+.enh-music-progress-fill {
+  position: relative;
+  display: block;
+  height: 4px;
+  width: 0;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transition: width .12s linear;
+}
+
+/* 拖拽点：悬停进度条或正在播放时显示 */
+.enh-music-progress:hover .enh-music-progress-fill::after,
+.enh-music:has(.enh-music-btn[data-playing]) .enh-music-progress-fill::after {
+  transform: translateY(-50%) scale(1);
+}
+
+/* 播放中：音符图标轻微脉动 */
+.enh-music:has(.enh-music-btn[data-playing]) .enh-music-ico {
+  animation: enh-music-beat 1.6s ease-in-out infinite;
+}
+
+@keyframes enh-music-beat {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+
+@media (max-width: 768px) {
+  main .enh-music { width: calc(100% - 24px); }
+  .enh-music-tag { display: none; }
+}
+
+/* ==========================================================================
+   路线图：单日任务条太窄，标题完全看不见
+   甘特条宽度由 JS 按天数内联计算（style.width = N px），单日任务只有 ~30px，
+   一天的格子根本放不下文字。min-width 永远优先于 width（包括内联样式），
+   所以这里一条规则就能兜底，不用改主题的 JS。
+   每个任务独占一行（top = 34 * 行号），加宽不会互相压盖；
+   任务条本身带 .ellipsis，超出 280px 的长标题省略，点击仍可看完整详情。
+   ========================================================================== */
+#gantt-container .task-container .task-bar {
+  min-width: 150px;                    /* 兜底：不支持 min() 的老浏览器至少能看到约 10 个字 */
+  min-width: min(max-content, 280px);  /* 首选：整条标题都显示，超长封顶 280px 省略 */
+}
+
+/* ==========================================================================
+   首页顶部：站点运行时间（精确到秒，JS 每秒刷新）
+   等宽数字（tabular-nums）避免秒数跳动时整个条子左右晃动。
+   ========================================================================== */
+.enh-runtime-top {
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 16px; margin: 0 0 12px; text-align: center;
+  font-size: 13px; color: var(--color-font-2);
+}
+.enh-runtime-top .enh-rt-label { opacity: .75; }
+.enh-runtime-top .enh-rt-val {
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+  font-weight: 500; letter-spacing: .5px; color: var(--color-primary);
+}
+.enh-runtime-top .enh-rt-since { opacity: .55; font-size: 12px; }
+
+/* ==========================================================================
+   路线图任务条上色
+   主题默认是「从颜色渐变到透明」再叠半透明，浅色背景下几乎分不出状态、看着发灰。
+   这里改成实色渐变 + 白字，三种状态一眼可分：
+     已结束 = 蓝紫 / 进行中 = 橙红 / 未开始 = 青绿
+   ========================================================================== */
+#gantt-container .task-container .task-bar { color: #fff !important; }
+#gantt-container .task-container .task-bar.expired {
+  background: linear-gradient(135deg, #534ab7, #7f77dd) !important;
+  opacity: 1 !important;
+}
+#gantt-container .task-container .task-bar.doing {
+  background: linear-gradient(135deg, #d85a30, #ef9f27) !important;
+  opacity: 1 !important;
+}
+#gantt-container .task-container .task-bar.todo {
+  background: linear-gradient(135deg, #0f6e56, #1d9e75) !important;
+  opacity: 1 !important;
+}
+#gantt-container .task-container .task-bar:hover {
+  background: linear-gradient(135deg, #185fa5, #378add) !important;
+}
