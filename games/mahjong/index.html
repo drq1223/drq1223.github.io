@@ -1511,7 +1511,8 @@
     var pl = players[localSeat()];
     if (!pl) return null;
     var meldCount = pl.melds.length;
-    var slots = pl.hand.length + meldCount * 3 + meldCount;
+    // 每个副露在最右那张（刚上的牌）前多留一道缝（0.2tw），算宽度时也要算进去，保证整行还居中
+    var slots = pl.hand.length + meldCount * 3 + meldCount + meldCount * 0.2;
     var tw = Math.min(TILE_W, (W - 120) / Math.max(1, slots + 1));
     var th = tw * (TILE_H / TILE_W);
     var totalW = slots * tw;
@@ -1525,6 +1526,8 @@
     for (var m = 0; m < pl.melds.length; m++) {
       x += tw * 0.35;
       for (var k = 0; k < pl.melds[m].tiles.length; k++) {
+        // 刚上的牌固定在最右：在它前面留道小缝和另两张分开（缝不用太大）
+        if (k === pl.melds[m].tiles.length - 1) x += tw * 0.2;
         drawTile(x, y + 6, tw * 0.78, th * 0.78, pl.melds[m].tiles[k]);
         x += tw * 0.78;
       }
@@ -1546,8 +1549,13 @@
       for (i = 0; i < n; i++) drawTile(x0 + i * tw, 26, tw - 2, th, null);
       var mx = x0 + n * tw + 26;
       for (i = 0; i < pl.melds.length; i++) {
-        for (var k = 0; k < pl.melds[i].tiles.length; k++) drawTile(mx, 30, tw * 0.7, th * 0.7, pl.melds[i].tiles[k]);
-        mx += tw * 0.7 * 3 + 8;
+        for (var k = 0; k < pl.melds[i].tiles.length; k++) {
+          // 刚上的牌（最右）前留道小缝，和另两张分开
+          if (k === pl.melds[i].tiles.length - 1) mx += tw * 0.18;
+          drawTile(mx, 30, tw * 0.7, th * 0.7, pl.melds[i].tiles[k]);
+          mx += tw * 0.7;
+        }
+        mx += 8;
       }
     } else {                                      // 左右两家：竖向
       var bx = (slot === 3) ? 26 : W - 26 - th;
@@ -1557,8 +1565,13 @@
       }
       var my = y0 + n * tw + 20;
       for (i = 0; i < pl.melds.length; i++) {
-        for (var k2 = 0; k2 < pl.melds[i].tiles.length; k2++) drawTile(bx, my, th * 0.72, tw * 0.72, pl.melds[i].tiles[k2]);
-        my += tw * 0.72 * 3 + 6;
+        for (var k2 = 0; k2 < pl.melds[i].tiles.length; k2++) {
+          // 刚上的牌（最下）前留道小缝，和另两张分开
+          if (k2 === pl.melds[i].tiles.length - 1) my += tw * 0.18;
+          drawTile(bx, my, th * 0.72, tw * 0.72, pl.melds[i].tiles[k2]);
+          my += tw * 0.72;
+        }
+        my += 6;
       }
     }
     // 名字
