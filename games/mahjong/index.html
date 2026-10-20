@@ -433,8 +433,10 @@
     turn = p;
     if (wall.length <= 0) { endGame(-1, "流局"); return; }
     var pl = players[p];
-    pl.hand.push(wall.pop());
+    // 先把手里理整齐，再把刚摸的那张插到最左边 —— 一眼看得出摸到了什么。
+    // 出牌时 discard() 里会 sortHand 重排，所以这只是"待出牌"状态的临时排法。
     sortHand(pl.hand);
+    pl.hand.unshift(wall.pop());
     // 自摸：所有人一视同仁地走询问流程，Humans 才会弹按钮 / 远程才会被等待
     var wt = checkWin(pl);
     if (wt) {
@@ -913,9 +915,10 @@
   function installCachedHand() {
     if (handCache[mySeat]) {
       var arr = handCache[mySeat];
+      // 不 sort：保持房主广播的顺序。房主会把刚摸的牌排在最左（beginTurn），
+      // 这里重排的话客人就看不到"刚摸的是哪张"了。
       players[mySeat].hand = arr.map(deTile);
       players[mySeat].count = arr.length;
-      sortHand(players[mySeat].hand);
     }
   }
 

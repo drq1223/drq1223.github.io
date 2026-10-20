@@ -1,0 +1,10 @@
+# Issue 模板选择页的配置
+# 保留「打开空白 issue」入口，方便不适用任何模板的情况
+blank_issues_enabled: true
+contact_links:
+  - name: 用博客表单申请友链
+    url: https://drq1223.github.io/submit-link/
+    about: 不想用 GitHub？在博客页填表，可以走邮件提交
+  - name: 博客主页
+    url: https://drq1223.github.io/
+    about: 返回博客
