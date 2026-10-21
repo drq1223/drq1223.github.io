@@ -362,6 +362,9 @@
   var msg = "";
   var timers = [];
   var started = false;
+  /* 刚摸的那张牌还在手上（排在最右）—— 只影响绘制：在它前面留一道小缝。
+     碰/吃之后要出牌时它不是"刚摸的"，缝就不画了。 */
+  var justDrew = false;
 
   /* 谁被等待：{ seat, mode }  mode = "draw"（等出牌） / "none"
      这份数据是联机的契约：客人端靠它判断自己能不能点牌 —— 不能只看 turn，
@@ -418,6 +421,7 @@
     discardPile = []; pending = null; result = null; selIdx = -1; hoverIdx = -1;
     claims = []; claimReq = null; claimDone = null; setWait(-1, "none");
     turn = 0;
+    justDrew = false;                 // 别把上一局的"刚摸的牌"缝带进新一局
     // ★ 必须重置 phase：上一局结束时它是 "over"，不清掉的话 beginTurn→toDiscard
     //   第一行就 return，庄家摸完牌直接卡死（点手牌没反应、提示条停在旧 msg）。
     phase = "idle";
@@ -433,10 +437,10 @@
     turn = p;
     if (wall.length <= 0) { endGame(-1, "流局"); return; }
     var pl = players[p];
-    // 先把手里理整齐，再把刚摸的那张插到最左边 —— 一眼看得出摸到了什么。
+    // 先把手里理整齐，再把刚摸的那张放到最右边 —— 一眼看得出摸到了什么。
     // 出牌时 discard() 里会 sortHand 重排，所以这只是"待出牌"状态的临时排法。
     sortHand(pl.hand);
-    pl.hand.unshift(wall.pop());
+    pl.hand.push(wall.pop());
     // 自摸：所有人一视同仁地走询问流程，Humans 才会弹按钮 / 远程才会被等待
     var wt = checkWin(pl);
     if (wt) {
@@ -454,6 +458,8 @@
   function toDiscard(p, drew) {
     if (phase === "over") return;
     var pl = players[p];
+    // drew=true 表示这次出牌是"刚摸完"；碰/吃之后要出的那张牌不是新摸的，不加缝
+    justDrew = (p === localSeat() && !!drew);
     if (pl.isAI) {
       phase = "ai"; setWait(-1, "none");
       after(0.55, function () { aiDiscard(p); });
@@ -477,6 +483,7 @@
     pl.discards.push(t);
     discardPile.push({ tile: t, by: p });
     sortHand(pl.hand);
+    justDrew = false;               // 牌已出手，手牌恢复有序，不再画"刚摸的"那道缝
     hideActs();
     claimReq = null;
     pending = { tile: t, from: p };
@@ -915,10 +922,12 @@
   function installCachedHand() {
     if (handCache[mySeat]) {
       var arr = handCache[mySeat];
-      // 不 sort：保持房主广播的顺序。房主会把刚摸的牌排在最左（beginTurn），
+      // 不 sort：保持房主广播的顺序。房主会把刚摸的牌排在最右（beginTurn），
       // 这里重排的话客人就看不到"刚摸的是哪张"了。
       players[mySeat].hand = arr.map(deTile);
       players[mySeat].count = arr.length;
+      // 客人端不走 toDiscard，用"轮到我出牌"近似判断最后一张是不是刚摸的
+      justDrew = iAmdrawNow();
     }
   }
 
@@ -1511,14 +1520,17 @@
     var pl = players[localSeat()];
     if (!pl) return null;
     var meldCount = pl.melds.length;
-    // 每个副露在最右那张（刚上的牌）前多留一道缝（0.2tw），算宽度时也要算进去，保证整行还居中
-    var slots = pl.hand.length + meldCount * 3 + meldCount + meldCount * 0.2;
+    // 每个副露在最右那张（刚上的牌）前多留一道缝（0.2tw）；
+    // 刚摸的那张（手牌最右）前同样留一道。算宽度时都要算进去，保证整行还居中。
+    var slots = pl.hand.length + meldCount * 3 + meldCount + meldCount * 0.2 + (justDrew ? 0.2 : 0);
     var tw = Math.min(TILE_W, (W - 120) / Math.max(1, slots + 1));
     var th = tw * (TILE_H / TILE_W);
     var totalW = slots * tw;
     var x0 = (W - totalW) / 2, y = H - th - 26;
     var x = x0;
     for (var i = 0; i < pl.hand.length; i++) {
+      // 刚摸的牌排在最右，在它前面留道小缝，和手牌主体分开（一眼看出摸到什么）
+      if (justDrew && i === pl.hand.length - 1) x += tw * 0.2;
       var lift = (i === hoverIdx || i === selIdx) ? 12 : 0;
       drawTile(x, y - lift, tw - 2, th, pl.hand[i]);
       x += tw;

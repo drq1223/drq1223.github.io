@@ -1,0 +1,377 @@
+/* ==========================================================================
+   Apple Motion — Apple 设计语言层
+   --------------------------------------------------------------------------
+   本文件只做「设计语言」层面的打磨，不改动任何结构布局：
+     A. 排版（光学字号 / 分级字距 / 行高）
+     B. 即时按压反馈（pointer-down 就给反馈，不等 click）
+     C. 材质与景深（半透明层 + 滚动边缘渐隐，替代生硬的分隔线）
+     D. 滚动条、聚焦环、数字对齐等细节
+     E. 无障碍：减少动画 / 减少透明 / 提高对比度 三套降级
+
+   全部配色沿用 cosy 主题的 CSS 变量，自动跟随亮色 / 暗色。
+   ========================================================================== */
+
+/* ==========================================================================
+   A. 排版 —— Apple 的做法：字距随字号变化，行高与字号反向联动
+   ========================================================================== */
+
+:root {
+  /* 字族：优先系统字体，它自带光学尺寸、字距表和易读性调优。
+     主题默认的 "linear" 是几何无衬线，作拉丁回退保留在后面。 */
+  --am-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "linear", "Inter UI", "Segoe UI", Roboto, sans-serif;
+
+  /* 字距分级：大字收紧（负字距），正文归零，小字微放开。
+     固定一个 letter-spacing 值必然在某个字号上是错的。 */
+  --am-track-display: -0.028em;   /* >= 32px */
+  --am-track-title: -0.020em;    /* 20–32px */
+  --am-track-head: -0.012em;     /* 15–20px */
+  --am-track-body: 0em;          /* 13–15px 正文 */
+  --am-track-small: 0.006em;     /* <= 12px：放开一点才读得清 */
+
+  /* 行高分级：大标题紧、正文松 */
+  --am-lead-display: 1.08;
+  --am-lead-title: 1.22;
+  --am-lead-head: 1.35;
+  --am-lead-body: 1.68;
+
+  /* 运动：Apple 默认临界阻尼（无过冲）；只有手势自带惯性时才给回弹 */
+  --am-ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);        /* 临界阻尼近似 */
+  --am-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --am-press-scale: 0.965;         /* 按压缩放 */
+  --am-dur-press: 90ms;            /* 按下：越快越好，延迟会「掉下悬崖」 */
+  --am-dur-release: 420ms;         /* 抬起：略带回弹，因为手指带走了速度 */
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--am-font-sans);
+  letter-spacing: var(--am-track-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+}
+
+/* 显式开启光学尺寸（可变字体在支持的平台上按字号改字形） */
+h1, h2, h3, h4, h5, h6,
+.font-optical, .display {
+  font-optical-sizing: auto;
+}
+
+/* --- 大标题：收紧字距 + 收紧行高 --- */
+.cosy-theme-dark .welcome-title,
+.cosy-theme-light .welcome-title,
+h1, .am-display {
+  letter-spacing: var(--am-track-display);
+  line-height: var(--am-lead-display);
+  font-weight: 700;
+}
+
+h2, .am-title {
+  letter-spacing: var(--am-track-title);
+  line-height: var(--am-lead-title);
+}
+
+h3, h4, .am-head {
+  letter-spacing: var(--am-track-head);
+  line-height: var(--am-lead-head);
+}
+
+/* --- 正文段落：行高放宽，中英混排更透气 --- */
+.post-container article p,
+.article-container p,
+.enh-project-detail {
+  line-height: var(--am-lead-body);
+}
+
+/* --- 小字：微放开字距；数字用等宽避免跳动 --- */
+.enh-post-meta,
+.enh-home-info,
+.enh-site-stats,
+.enh-result-meta,
+.enh-wx-range,
+.enh-project-desc {
+  letter-spacing: var(--am-track-small);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* 时间 / 计数一律等宽数字，否则秒数跳动时整条会左右晃 */
+.enh-music-time,
+.enh-music-duration,
+.enh-runtime-top .enh-rt-val {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* 中英混排：中文和拉丁之间自动补一点空隙，读起来不再糊在一起 */
+.post-container article p,
+.article-container p,
+.enh-project-detail,
+.enh-home-item p {
+  text-autospace: ideograph-alpha;
+}
+
+/* ==========================================================================
+   B. 即时按压反馈
+   --------------------------------------------------------------------------
+   核心：反馈必须发生在「按下的那一刻」，不能等 mouseup/click。
+   .am-pressed 由 apple-motion.js 在 pointerdown 时加上，
+   pointerup / pointercancel / 拖离目标时移除。
+   抬起用更长的时长 + 轻微回弹，模拟弹簧从当前速度继续走完。
+   ========================================================================== */
+
+.am-pressable {
+  transition: transform var(--am-dur-release) var(--am-ease-out),
+    opacity var(--am-dur-release) var(--am-ease-out);
+  will-change: transform;
+}
+
+.am-pressable.am-pressed {
+  transform: scale(var(--am-press-scale));
+  transition-duration: var(--am-dur-press);
+  transition-timing-function: var(--am-ease-in-out);
+}
+
+/* 图标 / 圆形按钮：按压缩得更明显一点，才「按得动」 */
+.am-pressable.am-round.am-pressed {
+  transform: scale(0.9);
+}
+
+/* 触摸设备上没有 hover，别让按压态残留 */
+@media (hover: none) {
+  .am-pressable.am-pressed {
+    transform: scale(0.97);
+  }
+}
+
+/* ==========================================================================
+   C. 材质与景深
+   ========================================================================== */
+
+/* 搜索弹窗：不用 CSS keyframes（不可中断），交给 JS 弹簧驱动。
+   「materialize」——模糊半径、缩放、透明度一起动，读起来才像一块真实材质落下。 */
+html.am-ready .enh-modal {
+  animation: none;
+}
+
+html.am-ready #enh-search-mask {
+  background: transparent;
+}
+
+html.am-ready #enh-search-mask.is-animating {
+  display: flex !important;
+}
+
+/* 弹窗：亮色主题下加一道顶部高光（光打在材质上沿），暗色下加内阴影 */
+.enh-modal {
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.cosy-theme-light .enh-modal {
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* --- 滚动边缘渐隐：内容接到悬浮栏时淡出，而不是一条 1px 硬线 --- */
+.am-edge-fade {
+  position: relative;
+}
+
+.am-edge-fade::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 24px;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 220ms var(--am-ease-out);
+  background: linear-gradient(to bottom, transparent, var(--color-bg));
+}
+
+.am-edge-fade.is-scrolled-up::after {
+  opacity: 1;
+}
+
+/* --- 卡片：更大更远的阴影 + 圆角对齐，材质越重层级越低 --- */
+.enh-home-item,
+.enh-friend,
+.enh-project {
+  border-radius: 12px;
+  transition: border-color 220ms var(--am-ease-out),
+    box-shadow 220ms var(--am-ease-out);
+}
+
+.cosy-theme-light .enh-home-item:hover,
+.cosy-theme-light .enh-friend:hover {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* ==========================================================================
+   D. 细节：滚动条 / 聚焦环 / 滚动行为
+   ========================================================================== */
+
+/* 滚动条：细一点、圆一点，静止时淡出（macOS 的行为） */
+.am-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar) transparent;
+}
+
+.am-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.am-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.am-scroll::-webkit-scrollbar-thumb {
+  background-clip: content-box;
+  background-color: var(--color-scrollbar);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  transition: background-color 200ms var(--am-ease-out);
+}
+
+.am-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-scrollbar-hover);
+}
+
+/* 滚动到边界时用橡皮筋回弹，而不是把整页带着一起弹 */
+.cosy-scrollbar {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 聚焦环：Apple 的做法是一圈柔和的外扩光环，不是硬描边 */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-radius: 8px;
+  transition: box-shadow 160ms var(--am-ease-out);
+}
+
+/* 回到顶部：悬浮材质按钮，静止时完全透明不抢视线 */
+#am-to-top {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--color-popup-border, rgba(128, 128, 128, 0.18));
+  border-radius: 50%;
+  background: var(--color-popup-bg, rgba(255, 255, 255, 0.72));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  color: var(--color-font);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8) translateY(8px);
+}
+
+#am-to-top.is-visible {
+  pointer-events: auto;
+}
+
+#am-to-top svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ==========================================================================
+   滚动揭示：JS 驱动，初始隐藏态只在 JS 就绪后生效
+   （否则脚本挂了内容就永远不显示）
+   ========================================================================== */
+
+html.am-ready .am-reveal {
+  opacity: 0;
+}
+
+/* ==========================================================================
+   E. 无障碍降级 —— 三个信号各自独立，分别处理
+   ========================================================================== */
+
+/* 减少动画：不是「没有反馈」，而是换成不引起前庭不适的等价物 ——
+   交叉淡入替代位移/弹簧，保留有助于理解的颜色与透明度变化 */
+@media (prefers-reduced-motion: reduce) {
+  .am-pressable,
+  .am-pressable.am-pressed {
+    transform: none !important;
+    transition: opacity 160ms linear;
+  }
+
+  .am-pressable.am-pressed {
+    opacity: 0.7;
+  }
+
+  html.am-ready .am-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  #am-to-top {
+    transition: opacity 160ms linear !important;
+    transform: none !important;
+  }
+
+  .enh-modal {
+    animation: none !important;
+  }
+
+  .enh-home-item:hover,
+  .enh-friend:hover,
+  .enh-tag-item:hover {
+    transform: none !important;
+  }
+}
+
+/* 减少透明：材质变实，去掉模糊，保证文字对比度 */
+@media (prefers-reduced-transparency: reduce) {
+  #enh-search-mask {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+  }
+
+  .enh-weather,
+  main .enh-music,
+  #am-to-top {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: var(--color-bg) !important;
+    border-color: var(--color-border) !important;
+  }
+}
+
+/* 提高对比度：接近实色 + 明确的高对比描边 */
+@media (prefers-contrast: more) {
+  .enh-modal,
+  .enh-home-item,
+  .enh-friend,
+  .enh-project,
+  #am-to-top {
+    background: var(--color-bg) !important;
+    border: 1px solid var(--color-font) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
