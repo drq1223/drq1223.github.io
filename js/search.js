@@ -169,10 +169,14 @@
 
   /* ---------- 弹窗控制 ---------- */
 
-  function open() {
+  // Apple Motion 接管了开合动画；脚本没加载时走原来的 CSS 动画，行为不变
+  function am() { return window.amAnimate; }
+
+  function open(trigger) {
     mask.classList.add('is-open');
     input.value = '';
     input.focus();
+    if (am()) am().modalIn(mask, trigger);
     if (index) {
       body.innerHTML = '<div class="enh-empty">输入关键词开始搜索</div>';
     } else {
@@ -184,6 +188,7 @@
   }
 
   function close() {
+    if (am() && am().modalOut(mask)) return;   // 返回 true 表示动画由弹簧接管，结束后它会自己摘掉 is-open
     mask.classList.remove('is-open');
   }
 
@@ -257,9 +262,11 @@
         '<span class="enh-kbd">K</span>' +
       '</div>';
 
-    box.addEventListener('click', open);
+    // 把入口元素传给 spring，弹窗才会从它那个方向「长出来」（空间一致性）
+    var handle = box.querySelector('.enh-search-box');
+    box.addEventListener('click', function () { open(handle); });
     box.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(handle); }
     });
 
     header.appendChild(box);

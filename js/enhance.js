@@ -163,18 +163,29 @@
     document.body.appendChild(lb);
     var lbImg = lb.querySelector('img');
 
+    function closeLb() {
+      var am = window.amAnimate;
+      // 返回 true 表示弹簧接管了关闭动画，结束后它自己摘掉 is-open
+      if (am && am.lightboxOut(lb)) return;
+      lb.classList.remove('is-open');
+    }
+
     Array.prototype.forEach.call(imgs, function (img) {
       img.classList.add('enh-zoomable');
       img.addEventListener('click', function () {
         lbImg.src = img.src;
         lbImg.alt = img.alt || '';
+        // 记下缩略图此刻的位置，灯箱才能从这块区域长出来
+        var from = img.getBoundingClientRect();
         lb.classList.add('is-open');
+        var am = window.amAnimate;
+        if (am) am.lightboxIn(lb, lbImg, from);
       });
     });
 
-    lb.addEventListener('click', function () { lb.classList.remove('is-open'); });
+    lb.addEventListener('click', closeLb);
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') lb.classList.remove('is-open');
+      if (e.key === 'Escape') closeLb();
     });
   }
 

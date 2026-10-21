@@ -48,8 +48,15 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* 正文换用系统字体：它自带光学尺寸、字距表和易读性调优，
+   Apple 的原则是「有理由才覆盖系统字体」。
+   做法是只改主题那个变量 —— 主题里显式用 linear / motto 的展示性文字（logo、标语）
+   不受影响，品牌字形照旧。想换回来：把下面这行注释掉即可。 */
+html.am-typo {
+  --font-regular: var(--am-font-sans);
+}
+
 body {
-  font-family: var(--am-font-sans);
   letter-spacing: var(--am-track-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -168,6 +175,11 @@ html.am-ready #enh-search-mask.is-animating {
   display: flex !important;
 }
 
+/* 灯箱图片：同样交给 JS 弹簧做 FLIP，关掉主题的 keyframes */
+html.am-ready #enh-lightbox img {
+  animation: none;
+}
+
 /* 弹窗：亮色主题下加一道顶部高光（光打在材质上沿），暗色下加内阴影 */
 .enh-modal {
   border-radius: 14px;
@@ -252,16 +264,30 @@ html.am-ready #enh-search-mask.is-animating {
   -webkit-overflow-scrolling: touch;
 }
 
-/* 聚焦环：Apple 的做法是一圈柔和的外扩光环，不是硬描边 */
+/* 聚焦环：Apple 的做法是一圈柔和的外扩光环，不是硬描边。
+   先给一个所有浏览器都认的 outline 兜底，只有支持 color-mix 的浏览器
+   才换成那圈柔和光晕 —— 否则老浏览器上会是「outline:none + 无效 box-shadow」
+   = 键盘用户完全没有焦点提示。 */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 summary:focus-visible,
 [tabindex]:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 40%, transparent);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
   border-radius: 8px;
-  transition: box-shadow 160ms var(--am-ease-out);
+}
+
+@supports (color: color-mix(in srgb, red 50%, transparent)) {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  summary:focus-visible,
+  [tabindex]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 40%, transparent);
+    transition: box-shadow 160ms var(--am-ease-out);
+  }
 }
 
 /* 回到顶部：悬浮材质按钮，静止时完全透明不抢视线 */
