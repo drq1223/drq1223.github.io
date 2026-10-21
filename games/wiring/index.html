@@ -175,9 +175,20 @@
     try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
     return actx;
   }
+  /* 音频是懒加载的：只有点了「开始接线」（bStart）才会走到这里 fetch + decode，
+     进页面本身一个音频字节都不下载。
+     格式优先 48k opus（52KB），浏览器不支持才回退 96k mp3（87KB）；
+     这两个都是 ffmpeg 从原来的 320k mp3（287KB）转出来的，时长 7.34s 不变。 */
+  function hornURL() {
+    try {
+      var a = document.createElement("audio");
+      if (a.canPlayType && a.canPlayType('audio/ogg; codecs="opus"')) return "assets/horn.opus";
+    } catch (e) {}
+    return "assets/horn.mp3";
+  }
   function loadHorn() {
     if (!audio()) return;
-    fetch("assets/horn.mp3").then(function (r) { return r.arrayBuffer(); }).then(function (b) {
+    fetch(hornURL()).then(function (r) { return r.arrayBuffer(); }).then(function (b) {
       return new Promise(function (res, rej) { actx.decodeAudioData(b, res, rej); });
     }).then(function (d) { hornBuf = d; }).catch(function () {});
   }
