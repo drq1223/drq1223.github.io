@@ -290,7 +290,10 @@ summary:focus-visible,
   }
 }
 
-/* 回到顶部：悬浮材质按钮，静止时完全透明不抢视线 */
+/* 回到顶部：悬浮材质按钮，静止时完全透明不抢视线。
+   注意：默认态不能写 transform —— 那会让这个毛玻璃按钮的 backdrop-filter 失效
+   （同 GLASS_SEL 的坑），而且 JS 静止时会清掉内联 transform，
+   一清就会回落到这里的 CSS 值，按钮会突然缩小位移。缩放与位移全部交给 JS。 */
 #am-to-top {
   position: fixed;
   right: 22px;
@@ -311,7 +314,6 @@ summary:focus-visible,
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transform: scale(0.8) translateY(8px);
 }
 
 #am-to-top.is-visible {

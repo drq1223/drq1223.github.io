@@ -48,6 +48,15 @@
 
   function reduced() { return mqReduce.matches; }
 
+  /* ======================================================================
+     带毛玻璃的元素：与 liquid-glass.css 的选择器保持一致。
+     这些元素上有 backdrop-filter，而「被合成/带 transform」会毁掉毛玻璃
+     （实测表现为整张卡片变成一层洗旧的半透明色块，文字发灰）。
+     所以下面几处一律跳过它们 —— 它们本来就有自己的弹簧曲线悬停与 :active。
+     ====================================================================== */
+  var GLASS_SEL = '.enh-weather, .enh-music, .enh-home-item, .enh-project, .enh-modal';
+  function isGlass(el) { return !!(el && el.closest && el.closest(GLASS_SEL)); }
+
   var root = document.documentElement;
   root.classList.add('am-ready');
   if (cfg.typography !== false) root.classList.add('am-typo');
@@ -235,7 +244,7 @@
       var el = e.target.closest ? e.target.closest(PRESS_SEL) : null;
       if (!el) return;
       if (el.closest(PRESS_SKIP)) return;
-      if (el.closest('.am-card')) return;   // 卡片有自己的弹簧，别双重缩放
+      if (isGlass(el)) return;         // 毛玻璃元素有自己的 :active，别给它加 transform
 
       startEl = el;
       startX = e.clientX;
@@ -291,7 +300,9 @@
     if (cfg.cards === false || reduced()) return;
     if (mqCoarse.matches) return;
 
-    var cards = document.querySelectorAll('.enh-home-item, .enh-friend, .enh-tag-item');
+    // 注意：不含 .enh-home-item —— 它是毛玻璃卡片，见文件开头的 GLASS_SEL 说明。
+    // 少了这几个字母，整张卡片的玻璃会变成一层洗旧的半透明色块。
+    var cards = document.querySelectorAll('.enh-friend, .enh-tag-item');
     Array.prototype.forEach.call(cards, function (el) {
       el.classList.add('am-card');
 
@@ -305,6 +316,14 @@
       });
 
       function render() {
+        // 两条弹簧都停下时把 transform 也撤掉：常驻的内联 transform 会一直把元素
+        // 留在合成层里，纯属浪费（对有 backdrop-filter 的元素更是直接毁掉毛玻璃）。
+        if (lift.value === 0 && press.value === 0 &&
+            !lift._running && !press._running) {
+          el.style.transform = '';
+          el.style.willChange = 'auto';
+          return;
+        }
         var l = lift.value, p = press.value;
         el.style.transform =
           'translate3d(0,' + (l * -6).toFixed(3) + 'px,0) ' +
@@ -383,6 +402,13 @@
     // 材质化：模糊半径与缩放一起动
     mask.style.background = 'rgba(0,0,0,' + (v * 0.45).toFixed(3) + ')';
     mask.style.backdropFilter = mask.style.webkitBackdropFilter = 'blur(' + (v * 6).toFixed(2) + 'px)';
+    // .enh-modal 自己也是毛玻璃：动画一停就把 transform / opacity 撤掉，
+    // 否则常驻的内联 transform 会让它的玻璃失效（同 GLASS_SEL 的坑）。
+    if (v > 0.9995) {
+      panel.style.transform = '';
+      panel.style.opacity = '';
+      return;
+    }
     panel.style.opacity = v.toFixed(3);
     panel.style.transform =
       'translate3d(0,' + ((1 - v) * -14).toFixed(2) + 'px,0) scale(' + (0.93 + 0.07 * v).toFixed(4) + ')';
@@ -755,19 +781,24 @@
         if (!en.isIntersecting) return;
         var it = items.filter(function (x) { return x.el === en.target; })[0];
         io.unobserve(en.target);
-        if (!it) return;
+        if (!it || it.done) return;
+        it.done = true;
         setTimeout(function () {
-          it.el.style.willChange = 'transform, opacity';
+          it.el.style.willChange = 'opacity';
+          // 毛玻璃卡片不能带动画位移：一给 transform，它的 backdrop-filter 就失效，
+          // 整张卡片会变成洗旧的半透明色块。这些卡片只做淡入。
+          var glass = isGlass(it.el);
           var s = new Spring(0, {
             response: 0.45, damping: 1,
             onUpdate: function (v) {
               it.el.style.opacity = v.toFixed(3);
-              it.el.style.transform =
-                'translate3d(0,' + ((1 - v) * 16).toFixed(2) + 'px,0)';
+              if (!glass) {
+                it.el.style.transform = 'translate3d(0,' + ((1 - v) * 16).toFixed(2) + 'px,0)';
+              }
             },
             onRest: function () {
               it.el.style.willChange = 'auto';
-              it.el.style.transform = '';
+              if (!glass) it.el.style.transform = '';
             }
           });
           s.set(1);
@@ -776,6 +807,18 @@
     }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
 
     items.forEach(function (it) { io.observe(it.el); });
+
+    // 保险丝：万一 rAF 链因故中断（某个 onUpdate 抛错就会这样），
+    // 卡片不能永远停在半透明状态。两秒后还没演完的一律直接落到终态。
+    setTimeout(function () {
+      items.forEach(function (it) {
+        if (it.done) return;
+        it.done = true;
+        it.el.style.opacity = '1';
+        it.el.style.transform = '';
+        it.el.style.willChange = 'auto';
+      });
+    }, 2000);
   }
 
   /* ======================================================================
@@ -814,7 +857,9 @@
         btn.style.opacity = v.toFixed(3);
         btn.style.transform = 'scale(' + (0.82 + 0.18 * v).toFixed(4) + ') ' +
           'translate3d(0,' + ((1 - v) * 10).toFixed(2) + 'px,0)';
-      }
+      },
+      // 按钮自己也是毛玻璃，和卡片同理：静止时必须把 transform 撤掉
+      onRest: function () { btn.style.transform = ''; }
     });
 
     function onScroll() {
