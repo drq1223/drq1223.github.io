@@ -1266,3 +1266,27 @@ main .enh-music {
 #gantt-container .task-container .task-bar:hover {
   background: linear-gradient(135deg, #185fa5, #378add) !important;
 }
+
+/* --------------------------------------------------------------------------
+   表格横滑：容器由 scripts/html-polish.js 在构建时给 <table> 自动套上。
+   窄屏下表格自己横着滚，不撑宽整页、不挤行（防 CLS）。
+   -------------------------------------------------------------------------- */
+.table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 1em 0;
+  -webkit-overflow-scrolling: touch;
+}
+.table-wrap table {
+  width: auto;
+  min-width: 100%;
+}
+.table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+.table-wrap::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 8px;
+}
+
+/* 字体策略见 css/fonts.css（单独一个文件，游戏页也会加载它） */

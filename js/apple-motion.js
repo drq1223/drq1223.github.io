@@ -679,6 +679,18 @@
     // enhance.js 只在初始化时按 id 查过一次并缓存了引用，此刻换 id 不影响它。
     bar.style.visibility = 'hidden';
     bar.id = 'enh-progress-src';
+    /* id 一改，CSS 里 #enh-progress{position:fixed} 这条规则就失配了，
+       元素会掉回默认的 position:static —— body 本身就是 #app（display:flex），
+       于是它成了 flex 子项，实打实参与横向布局。
+       而它的宽度恰好就是进度百分比（enhance.js 每帧写 width:X%），
+       滚动越深它就越宽，把 #app > main 一路挤窄 ——
+       表现在用户眼里就是「往下滚动时页面宽度会变」。
+       这里用 absolute 把它挪出布局流、丢到视口外，只当数据源用：
+       width 照旧由 enhance.js 写，影子条靠 MutationObserver 读内联样式拿值，不受影响。 */
+    bar.style.position = 'absolute';
+    bar.style.top = '-9999px';
+    bar.style.left = '0';
+    bar.style.pointerEvents = 'none';
 
     var shadow = bar.cloneNode(false);
     shadow.id = 'enh-progress';

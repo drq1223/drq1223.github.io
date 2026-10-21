@@ -1,0 +1,24 @@
+/* ==========================================================================
+   字体加载策略
+   主题自带的 @font-face 没有 font-display，默认行为是 FOIT：
+   字体没下载完之前整页文字不显示（白屏等待），直接拖慢 LCP。
+   这里用同名 @font-face 覆盖（本文件在主题样式之后加载，同名声明会覆盖）：
+   swap = 先用系统字体把内容画出来，字体到了再替换，首屏不再被字体阻塞。
+
+   单独拆成一个文件是因为：游戏页（layout: game）会剔掉 enhance.css 等增强样式，
+   但字体策略对游戏页同样有用，所以它必须独立存在、不被剔除。
+
+   关于「子集化」：linear.woff2 只有 291 个字形、CJK 仅 1 个 —— 它本来就是拉丁字体，
+   中文标题正文走的是系统字体回退（--font-regular 里的 sans-serif）。
+   没有中文字形可删，做「常用 3000 字子集」没有意义，故不子集化。
+   ========================================================================== */
+@font-face {
+  font-family: linear;
+  src: url(../font/linear.woff2) format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: motto;
+  src: url(../font/motto.woff) format('woff');
+  font-display: swap;
+}
